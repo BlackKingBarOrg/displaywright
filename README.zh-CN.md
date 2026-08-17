@@ -170,6 +170,10 @@ make test                 # 等价于 python3 -m unittest discover -t . -s tests
   `monitors.lua` 里的规则会被原样保留。
 - HDR / ICC / 色彩管理等 `HL.MonitorSpec` 字段暂未接入界面，写盘时也不会动你手写的这些行。
 
+## 参与开发
+
+欢迎提 issue 和 PR —— 测试怎么跑、报 bug 要附什么，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。

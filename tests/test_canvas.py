@@ -15,7 +15,10 @@ except (ImportError, ValueError):  # PyGObject or the GTK4 typelib is missing
 
 from hyprlayout.model import Mode, MonitorState
 
-HAVE_DISPLAY = HAVE_GTK and Gtk.init_check()
+# Gtk.init_check() is not a display probe: it returns True even with no display
+# at all, and then constructing a widget segfaults. Gdk.Display.get_default() is
+# the honest signal.
+HAVE_DISPLAY = HAVE_GTK and Gtk.init_check() and Gdk.Display.get_default() is not None
 
 
 def monitor(name, w, h, x=0, y=0, scale=1.0):

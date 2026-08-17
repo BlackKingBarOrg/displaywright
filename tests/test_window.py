@@ -12,7 +12,7 @@ try:
     gi.require_version("Gtk", "4.0")
     gi.require_version("Gdk", "4.0")
     gi.require_version("Adw", "1")
-    from gi.repository import Adw, Gtk
+    from gi.repository import Adw, Gdk, Gtk
 
     HAVE_GTK = True
 except (ImportError, ValueError):  # PyGObject, GTK4 or libadwaita is missing
@@ -20,7 +20,10 @@ except (ImportError, ValueError):  # PyGObject, GTK4 or libadwaita is missing
 
 from hyprlayout import hypr, luawriter
 
-HAVE_DISPLAY = HAVE_GTK and Gtk.init_check()
+# Gtk.init_check() is not a display probe: it returns True even with no display
+# at all, and then constructing a widget segfaults. Gdk.Display.get_default() is
+# the honest signal.
+HAVE_DISPLAY = HAVE_GTK and Gtk.init_check() and Gdk.Display.get_default() is not None
 HAVE_HYPRLAND = hypr.is_running()
 
 

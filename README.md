@@ -194,6 +194,11 @@ make test     # python3 -m unittest discover -t . -s tests
 - HDR, ICC and colour-management fields of `HL.MonitorSpec` are not exposed yet;
   lines you wrote for them are left alone.
 
+## Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+for how to run the tests and what to include in a report.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
