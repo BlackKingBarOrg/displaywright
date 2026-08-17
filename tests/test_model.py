@@ -1,6 +1,12 @@
 import unittest
 
-from hyprlayout.model import Mode, MonitorState, scale_warning, suggest_scale
+from hyprlayout.model import (
+    Mode,
+    MonitorState,
+    scale_warning,
+    suggest_scale,
+    unmet_requests,
+)
 
 # Trimmed from `hyprctl monitors all -j` on a real laptop + ultrawide setup.
 HYPRCTL_SAMPLE = [
@@ -162,6 +168,54 @@ class ScaleTests(unittest.TestCase):
         laptop = MonitorState.from_hyprctl(HYPRCTL_SAMPLE[0])
         self.assertAlmostEqual(laptop.diagonal_inches, 15.9, places=1)
         self.assertEqual(MonitorState(name="X").diagonal_inches, 0.0)
+
+
+class UnmetRequestTests(unittest.TestCase):
+    """What Hyprland actually delivered versus what was asked for."""
+
+    def want(self, **kwargs):
+        base = {"name": "DP-1", "mode": Mode(3440, 1440, 60.0), "scale": 1.0}
+        base.update(kwargs)
+        return MonitorState(**base)
+
+    def test_exact_match_is_silent(self):
+        self.assertEqual(unmet_requests([self.want()], [self.want()]), [])
+
+    def test_refresh_rate_that_did_not_stick_is_reported(self):
+        got = self.want(mode=Mode(3440, 1440, 50.0))
+        problems = unmet_requests([self.want()], [got])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("50 Hz", problems[0])
+        self.assertIn("60 Hz", problems[0])
+
+    def test_nudged_scale_is_reported(self):
+        problems = unmet_requests([self.want(scale=1.3)], [self.want(scale=1.25)])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("1.25", problems[0])
+
+    def test_rounding_noise_in_scale_is_not_reported(self):
+        self.assertEqual(unmet_requests([self.want(scale=1.25)], [self.want(scale=1.2500001)]), [])
+
+    def test_disabled_outputs_are_skipped(self):
+        want = self.want(enabled=False)
+        got = self.want(enabled=False, mode=Mode(800, 600, 60.0))
+        self.assertEqual(unmet_requests([want], [got]), [])
+
+    def test_missing_output_is_skipped(self):
+        self.assertEqual(unmet_requests([self.want()], []), [])
+
+    def test_preferred_mode_makes_no_claim(self):
+        want = self.want(mode=None)
+        got = self.want(mode=Mode(1920, 1080, 60.0))
+        self.assertEqual(unmet_requests([want], [got]), [])
+
+    def test_several_outputs_each_reported(self):
+        wants = [self.want(), self.want(name="eDP-1", mode=Mode(3200, 2000, 120.0), scale=2.0)]
+        gots = [
+            self.want(mode=Mode(3440, 1440, 50.0)),
+            self.want(name="eDP-1", mode=Mode(3200, 2000, 60.0), scale=2.0),
+        ]
+        self.assertEqual(len(unmet_requests(wants, gots)), 2)
 
 
 class ComparisonTests(unittest.TestCase):

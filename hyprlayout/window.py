@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -14,7 +15,15 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from . import __version__, hypr, luawriter
 from .canvas import LayoutCanvas
-from .model import TRANSFORMS, Mode, MonitorState, bounding_box, scale_warning, suggest_scale
+from .model import (
+    TRANSFORMS,
+    Mode,
+    MonitorState,
+    bounding_box,
+    scale_warning,
+    suggest_scale,
+    unmet_requests,
+)
 from .profiles import ProfileStore, fingerprint
 from .snapping import auto_arrange, normalize, validate
 
@@ -42,10 +51,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.live_states: list[MonitorState] = []
         self._updating = False
         self._confirm_source: int | None = None
+        self._busy: str | None = None
 
         self._build_ui()
         self._install_actions()
-        self.reload_from_hyprland(announce=False)
+        # Startup needs the layout before the window is useful, so read inline.
+        self.reload_from_hyprland(announce=False, background=False)
 
         self._listener = hypr.EventListener(
             lambda name: GLib.idle_add(self._on_hypr_event, name)
@@ -278,22 +289,75 @@ class MainWindow(Adw.ApplicationWindow):
             action.connect("activate", handler)
             self.add_action(action)
 
+    # -------------------------------------------------------- background work
+
+    def _in_background(self, work, done) -> None:
+        """Run a blocking hyprctl call off the UI thread.
+
+        A modeset can keep hyprctl busy for a while -- longer still if the
+        compositor is fighting the hardware -- and doing that on the main loop
+        freezes the window until it finishes. ``done`` is called back on the UI
+        thread with ``(result, error)``.
+        """
+
+        def deliver(result, error):
+            done(result, error)
+            return False  # one-shot idle callback
+
+        def runner():
+            try:
+                result, error = work(), None
+            except Exception as exc:
+                result, error = None, exc
+            GLib.idle_add(deliver, result, error)
+
+        threading.Thread(target=runner, name="hyprlayout-hyprctl", daemon=True).start()
+
+    def _set_busy(self, message: str | None) -> None:
+        self._busy = message
+        if message:
+            self.banner.set_title(message)
+            self.banner.set_revealed(True)
+            self.apply_button.set_sensitive(False)
+        else:
+            self._refresh_status()
+
     # ------------------------------------------------------------------- state
 
-    def reload_from_hyprland(self, announce: bool = True) -> None:
-        try:
-            states = hypr.read_monitors()
-        except hypr.HyprError as exc:
-            self._toast(f"Could not read monitors: {exc}")
+    def reload_from_hyprland(self, announce: bool = True, background: bool = True) -> None:
+        """Re-read the layout. Reads go off-thread unless we need them now."""
+
+        def apply_result(states) -> None:
+            self.live_states = [s.copy() for s in states]
+            self.states = states
+            self.canvas.set_states(self.states)
+            self._refresh_output_model()
+            self._sync_sidebar()
+            self._refresh_status()
+            if announce:
+                self._toast("Reloaded from Hyprland")
+
+        if not background:
+            try:
+                apply_result(hypr.read_monitors())
+            except hypr.HyprError as exc:
+                self._toast(f"Could not read monitors: {exc}")
             return
-        self.live_states = [s.copy() for s in states]
-        self.states = states
-        self.canvas.set_states(self.states)
-        self._refresh_output_model()
-        self._sync_sidebar()
-        self._refresh_status()
-        if announce:
-            self._toast("Reloaded from Hyprland")
+
+        if self._busy is not None:
+            # An apply is mid-flight; swapping the layout under it would strand
+            # the keep-or-revert prompt.
+            self._toast("Busy talking to Hyprland — try again in a moment")
+            return
+
+        def done(states, error) -> None:
+            if error is not None:
+                self._toast(f"Could not read monitors: {error}")
+                return
+            apply_result(states)
+
+        # Reads are quick, so they get no progress banner of their own.
+        self._in_background(hypr.read_monitors, done)
 
     @property
     def dirty(self) -> bool:
@@ -313,7 +377,7 @@ class MainWindow(Adw.ApplicationWindow):
         size = f"{round(box.w)}×{round(box.h)}" if enabled else "nothing enabled"
         suffix = " · unapplied changes" if self.dirty else ""
         self.window_title.set_subtitle(f"{count} · {size}{suffix}")
-        self.apply_button.set_sensitive(self.dirty)
+        self.apply_button.set_sensitive(self.dirty and self._busy is None)
 
         problems = validate(self.states)
         warning = None
@@ -564,18 +628,25 @@ class MainWindow(Adw.ApplicationWindow):
         if not state.enabled:
             self._toast(f"{state.name} is disabled — nothing to look at")
             return
-        try:
-            hypr.focus_monitor(state.name)
-            # Aim at where the display *currently* is, not where the pending
-            # layout would put it.
-            live = next((s for s in self.live_states if s.name == state.name), None)
-            if live is not None and live.enabled:
-                hypr.move_cursor(int(live.rect.cx), int(live.rect.cy))
-        except hypr.HyprError as exc:
-            self._toast(f"Could not focus {state.name}: {exc}")
-            return
-        hypr.notify(f"This is {state.name} — {state.pretty_name}", ms=2500)
-        self._toast(f"Moved focus to {state.name}")
+        # Aim at where the display *currently* is, not where the pending layout
+        # would put it.
+        live = next((s for s in self.live_states if s.name == state.name), None)
+        target = (int(live.rect.cx), int(live.rect.cy)) if live and live.enabled else None
+        name, pretty = state.name, state.pretty_name
+
+        def work():
+            hypr.focus_monitor(name)
+            if target is not None:
+                hypr.move_cursor(*target)
+            hypr.notify(f"This is {name} — {pretty}", ms=2500)
+
+        def done(_result, error) -> None:
+            if error is not None:
+                self._toast(f"Could not focus {name}: {error}")
+            else:
+                self._toast(f"Moved focus to {name}")
+
+        self._in_background(work, done)
 
     # ------------------------------------------------------------------- apply
 
@@ -601,20 +672,43 @@ class MainWindow(Adw.ApplicationWindow):
         self._push_layout()
 
     def _push_layout(self) -> None:
-        try:
-            snapshot = hypr.read_monitors()
-        except hypr.HyprError:
-            snapshot = [s.copy() for s in self.live_states]
-        try:
-            hypr.apply_states(self.states)
-        except hypr.HyprError as exc:
-            self._toast(f"Apply failed: {exc}")
+        if self._busy is not None:
             return
-        self._confirm_layout(snapshot)
+        wanted = [s.copy() for s in self.states]
 
-    def _confirm_layout(self, snapshot: Sequence[MonitorState]) -> None:
+        def work():
+            try:
+                snapshot = hypr.read_monitors()
+            except hypr.HyprError:
+                snapshot = [s.copy() for s in self.live_states]
+            hypr.apply_states(wanted)
+            # Read back: an advertised mode can still be unreachable, and a
+            # fractional scale gets nudged. The user deserves to hear about it.
+            try:
+                achieved = hypr.read_monitors()
+            except hypr.HyprError:
+                achieved = []
+            return snapshot, achieved
+
+        def done(result, error) -> None:
+            self._set_busy(None)
+            if error is not None:
+                self._toast(f"Apply failed: {error}")
+                return
+            snapshot, achieved = result
+            self._confirm_layout(snapshot, unmet_requests(wanted, achieved))
+
+        self._set_busy("Applying — waiting for Hyprland…")
+        self._in_background(work, done)
+
+    def _confirm_layout(
+        self, snapshot: Sequence[MonitorState], shortfalls: Sequence[str] = ()
+    ) -> None:
         """Keep-or-revert prompt, defaulting to revert if nobody answers."""
-        dialog = Adw.AlertDialog(heading="Keep this arrangement?")
+        heading = "Keep this arrangement?"
+        if shortfalls:
+            heading = "Applied, but not exactly as asked"
+        dialog = Adw.AlertDialog(heading=heading)
         dialog.add_response("revert", "Revert")
         dialog.add_response("keep", "Keep changes")
         dialog.set_response_appearance("keep", Adw.ResponseAppearance.SUGGESTED)
@@ -629,9 +723,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         remaining = CONFIRM_SECONDS
 
+        preamble = ("\n".join(shortfalls) + "\n\n") if shortfalls else ""
+
         def render() -> None:
             dialog.set_body(
-                f"Reverting in {remaining}s if you do not confirm — "
+                f"{preamble}Reverting in {remaining}s if you do not confirm — "
                 "so a display that went black cannot lock you out."
             )
 
@@ -663,24 +759,32 @@ class MainWindow(Adw.ApplicationWindow):
 
         if response == "keep":
             write_config = checkbox.get_active()
-            try:
-                self.live_states = [s.copy() for s in hypr.read_monitors()]
-            except hypr.HyprError:
-                self.live_states = [s.copy() for s in self.states]
-            self._refresh_status()
-            if write_config:
-                self._write_config()
-            else:
-                self._toast("Applied — not saved, Hyprland will forget it on reload")
+
+            def kept(states, error) -> None:
+                self._set_busy(None)
+                self.live_states = [
+                    s.copy() for s in (self.states if error is not None else states)
+                ]
+                self._refresh_status()
+                if write_config:
+                    self._write_config()
+                else:
+                    self._toast("Applied — not saved, Hyprland will forget it on reload")
+
+            self._set_busy("Confirming with Hyprland…")
+            self._in_background(hypr.read_monitors, kept)
             return
 
-        try:
-            hypr.apply_states(snapshot)
-        except hypr.HyprError as exc:
-            self._toast(f"Revert failed: {exc}")
-            return
-        self.reload_from_hyprland(announce=False)
-        self._toast("Reverted to the previous arrangement")
+        def reverted(_result, error) -> None:
+            self._set_busy(None)
+            if error is not None:
+                self._toast(f"Revert failed: {error}")
+                return
+            self.reload_from_hyprland(announce=False)
+            self._toast("Reverted to the previous arrangement")
+
+        self._set_busy("Reverting…")
+        self._in_background(lambda: hypr.apply_states(snapshot), reverted)
 
     # ------------------------------------------------------------------ persist
 

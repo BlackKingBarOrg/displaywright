@@ -364,6 +364,34 @@ COMMON_SCALES = (1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0)
 TARGET_DPI = 110.0
 
 
+def unmet_requests(
+    requested: Iterable[MonitorState], achieved: Iterable[MonitorState]
+) -> list[str]:
+    """Describe what Hyprland did not actually deliver.
+
+    A mode can be advertised by the EDID and still be unreachable -- a link with
+    too little bandwidth for 3440x1440@60 quietly lands on a lower rate -- and a
+    fractional scale gets nudged to the nearest usable one. Comparing what we
+    asked for against what came back is the only way to tell the user honestly.
+    """
+    by_name = {s.name: s for s in achieved}
+    problems: list[str] = []
+    for want in requested:
+        got = by_name.get(want.name)
+        if got is None or not want.enabled or not got.enabled:
+            continue
+        if want.mode is not None and got.mode is not None and got.mode != want.mode:
+            problems.append(
+                f"{want.name} is running {got.mode.label()}, not the requested "
+                f"{want.mode.label()}"
+            )
+        if abs(got.scale - want.scale) > 0.001:
+            problems.append(
+                f"{want.name} scale settled at {got.scale:g}, not {want.scale:g}"
+            )
+    return problems
+
+
 def suggest_scale(state: MonitorState) -> float:
     """Pick a scale that puts this panel near :data:`TARGET_DPI`.
 

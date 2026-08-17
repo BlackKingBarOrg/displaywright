@@ -1,10 +1,13 @@
 """Main-window integration tests against the running compositor.
 
 These need both a display and a live Hyprland instance -- they read the real
-monitor list -- but they never apply or write anything.
+monitor list -- but they never apply a layout or write a file: the suite that
+exercises the apply path mocks hyprctl out.
 """
 
+import time
 import unittest
+from unittest import mock
 
 try:
     import gi
@@ -12,7 +15,7 @@ try:
     gi.require_version("Gtk", "4.0")
     gi.require_version("Gdk", "4.0")
     gi.require_version("Adw", "1")
-    from gi.repository import Adw, Gdk, Gtk
+    from gi.repository import Adw, Gdk, GLib, Gtk
 
     HAVE_GTK = True
 except (ImportError, ValueError):  # PyGObject, GTK4 or libadwaita is missing
@@ -25,6 +28,17 @@ from hyprlayout import hypr, luawriter
 # the honest signal.
 HAVE_DISPLAY = HAVE_GTK and Gtk.init_check() and Gdk.Display.get_default() is not None
 HAVE_HYPRLAND = hypr.is_running()
+
+
+def pump(predicate, timeout=5.0):
+    """Run the main loop until predicate() holds; hyprctl work is off-thread now."""
+    context = GLib.MainContext.default()
+    deadline = time.monotonic() + timeout
+    while not predicate() and time.monotonic() < deadline:
+        while context.pending():
+            context.iteration(False)
+        time.sleep(0.005)
+    return predicate()
 
 
 @unittest.skipUnless(HAVE_DISPLAY and HAVE_HYPRLAND, "needs a display and a running Hyprland")
@@ -74,7 +88,7 @@ class WindowTests(unittest.TestCase):
         state = self.window.canvas.selected_state()
         state.x += 500
         self.window.reload_from_hyprland(announce=False)
-        self.assertFalse(self.window.dirty)
+        self.assertTrue(pump(lambda: not self.window.dirty), "reload never settled")
 
     def test_edited_layout_shows_up_in_the_config_preview(self):
         state = self.window.canvas.selected_state()
@@ -224,6 +238,104 @@ class SidebarFeedbackTests(unittest.TestCase):
             self.skipTest("needs at least two outputs")
         for name in names + names[::-1]:
             self._poke(f"select {name}", lambda name=name: self.window.canvas.select(name))
+
+
+@unittest.skipUnless(HAVE_DISPLAY and HAVE_HYPRLAND, "needs a display and a running Hyprland")
+class AsyncApplyTests(unittest.TestCase):
+    """hyprctl must never run on the UI thread.
+
+    A modeset can keep it busy for a while, and blocking the main loop is what
+    makes Hyprland put up its "application is not responding" dialog. hyprctl is
+    mocked here, so nothing is applied for real.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        Adw.init()
+
+    def setUp(self):
+        from hyprlayout.window import MainWindow
+
+        self.window = MainWindow(None)
+        self.window._toast = lambda *_: None
+        self.confirmed = []
+        self.window._confirm_layout = lambda snapshot, shortfalls=(): self.confirmed.append(
+            (snapshot, list(shortfalls))
+        )
+
+    def tearDown(self):
+        self.window.shutdown()
+        self.window = None
+
+    def test_apply_returns_immediately_even_when_hyprctl_is_slow(self):
+        live = [s.copy() for s in self.window.states]
+
+        def slow_apply(_states):
+            time.sleep(1.5)
+            return "ok"
+
+        with mock.patch.object(hypr, "apply_states", side_effect=slow_apply), \
+                mock.patch.object(hypr, "read_monitors", return_value=live):
+            started = time.monotonic()
+            self.window._push_layout()
+            elapsed = time.monotonic() - started
+            self.assertLess(
+                elapsed, 0.3, f"_push_layout blocked the UI thread for {elapsed:.2f}s"
+            )
+            self.assertIsNotNone(self.window._busy, "no progress shown while applying")
+            self.assertFalse(self.window.apply_button.get_sensitive())
+            self.assertTrue(
+                pump(lambda: self.confirmed, timeout=10), "confirmation never arrived"
+            )
+        self.assertIsNone(self.window._busy, "busy state was not cleared")
+
+    def test_a_second_apply_is_ignored_while_one_is_in_flight(self):
+        live = [s.copy() for s in self.window.states]
+        calls = []
+
+        def slow_apply(states):
+            calls.append(states)
+            time.sleep(0.6)
+            return "ok"
+
+        with mock.patch.object(hypr, "apply_states", side_effect=slow_apply), \
+                mock.patch.object(hypr, "read_monitors", return_value=live):
+            self.window._push_layout()
+            self.window._push_layout()
+            self.window._push_layout()
+            self.assertTrue(pump(lambda: self.confirmed, timeout=10))
+        self.assertEqual(len(calls), 1, "apply ran more than once")
+
+    def test_a_mode_hyprland_could_not_deliver_is_reported(self):
+        from hyprlayout.model import Mode
+
+        live = [s.copy() for s in self.window.states]
+        target = self.window.canvas.selected_state()
+        px_w, px_h = target.pixel_size
+        target.mode = Mode(px_w, px_h, 137.0)  # nothing can do 137Hz
+
+        with mock.patch.object(hypr, "apply_states", return_value="ok"), \
+                mock.patch.object(hypr, "read_monitors", return_value=live):
+            self.window._push_layout()
+            self.assertTrue(pump(lambda: self.confirmed, timeout=10))
+
+        _snapshot, shortfalls = self.confirmed[0]
+        self.assertTrue(shortfalls, "silently accepted a mode that did not apply")
+        self.assertIn(target.name, shortfalls[0])
+
+    def test_a_failure_surfaces_instead_of_hanging(self):
+        messages = []
+        self.window._toast = messages.append
+        live = [s.copy() for s in self.window.states]
+
+        with mock.patch.object(hypr, "apply_states", side_effect=hypr.HyprError("boom")), \
+                mock.patch.object(hypr, "read_monitors", return_value=live):
+            self.window._push_layout()
+            self.assertTrue(pump(lambda: messages, timeout=10))
+
+        self.assertIn("boom", messages[-1])
+        self.assertIsNone(self.window._busy)
+        self.assertEqual(self.confirmed, [], "a failed apply must not ask to keep it")
 
 
 if __name__ == "__main__":
