@@ -30,6 +30,9 @@ def lua_string(value: str) -> str:
     return f'"{escaped}"'
 
 
+#: How Omarchy identifies the laptop panel (omarchy-hyprland-monitor-laptop).
+BUILTIN_OUTPUT_RE = re.compile(r"^(eDP|LVDS|DSI)-", re.IGNORECASE)
+
 _MODE_RE = re.compile(
     r"^\s*(?P<w>\d+)\s*x\s*(?P<h>\d+)\s*(?:@\s*(?P<r>[\d.]+)\s*(?:Hz)?)?\s*$",
     re.IGNORECASE,
@@ -153,6 +156,11 @@ class MonitorState:
         return px_w / (self.physical_width / 25.4)
 
     # ------------------------------------------------------------------ labels
+
+    @property
+    def is_builtin(self) -> bool:
+        """A laptop panel, which cannot simply be unplugged to recover it."""
+        return bool(BUILTIN_OUTPUT_RE.match(self.name))
 
     @property
     def pretty_name(self) -> str:

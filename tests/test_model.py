@@ -170,6 +170,16 @@ class ScaleTests(unittest.TestCase):
         self.assertEqual(MonitorState(name="X").diagonal_inches, 0.0)
 
 
+class BuiltinDetectionTests(unittest.TestCase):
+    def test_laptop_panels_are_recognised(self):
+        for name in ("eDP-1", "eDP-2", "LVDS-1", "DSI-1", "edp-1"):
+            self.assertTrue(MonitorState(name=name).is_builtin, name)
+
+    def test_external_outputs_are_not(self):
+        for name in ("DP-1", "HDMI-A-1", "DVI-D-1", "HEADLESS-2", ""):
+            self.assertFalse(MonitorState(name=name).is_builtin, name)
+
+
 class UnmetRequestTests(unittest.TestCase):
     """What Hyprland actually delivered versus what was asked for."""
 

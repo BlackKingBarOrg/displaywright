@@ -45,6 +45,9 @@ use to apply changes live. hyprlayout speaks the Lua dialect on both ends:
 - **Your config stays yours.** Only hyprlayout's own managed block is rewritten.
   The catch-all `output = ""` rule and rules for outputs that are not connected
   right now are left untouched.
+- **Turn the laptop panel off, safely.** Switch the built-in display off while
+  you are docked; it comes back by itself once no external display is left, with
+  or without hyprlayout running. See below.
 - **Profiles.** Save arrangements ("dock", "laptop only") and recognise them
   again by an output fingerprint.
 - **Live refresh.** Watches Hyprland's event socket, so plugging a monitor in
@@ -94,6 +97,9 @@ hyprlayout --dump                # current layout as JSON
 hyprlayout --print-lua           # the monitors.lua block for the current layout
 hyprlayout --diff                # what --save would change
 hyprlayout --save                # write monitors.lua (keeps a timestamped backup)
+hyprlayout --builtin off         # switch the laptop panel off (docked)
+hyprlayout --builtin on          # switch it back on
+hyprlayout --builtin toggle      # flip it -- handy on a keybinding
 hyprlayout --save-profile dock   # save the current layout as a profile
 hyprlayout --apply-profile dock  # apply a profile (no confirmation countdown)
 hyprlayout --list-profiles
@@ -138,6 +144,33 @@ modern form first and falls back automatically:
 Note that `hyprctl` exits 0 even when it refuses a request (a Lua-configured
 Hyprland answers `keyword can't work with non-legacy parsers`), so acceptance has
 to be read from the reply text — which is what the code does.
+
+## Turning the laptop panel off
+
+Switch the built-in display off in the sidebar, or run `hyprlayout --builtin off`.
+It stays off **only while an external display is connected** -- unplug the
+external one and the panel comes back on its own, whether or not this app is
+running.
+
+That guarantee is not something hyprlayout invents. Writing `disabled = true` for
+a laptop panel into `monitors.lua` would be a trap: nothing ever removes it, so
+the next time you undock you get a black machine. Omarchy already ships the
+pieces to avoid that, and hyprlayout writes into them instead:
+
+| Piece | What it does | When |
+| --- | --- | --- |
+| `~/.local/state/omarchy/toggles/hypr/internal-monitor-disable.lua` | holds the actual "off" rule; `require`d by the Hyprland config after `monitors.lua`, so it wins | on config load |
+| `omarchy-recover-internal-monitor.service` | deletes that file when no external display is physically connected | before the graphical session |
+| `omarchy-hyprland-monitor-watch` | switches the panel back on when no external output is active any more | on hotplug |
+
+So `monitors.lua` keeps a normal *enabled* rule for the panel even while it is
+switched off, because that rule is where Omarchy reads the mode, position and
+scale it restores the panel with. `tests/test_omarchy_contract.py` pins this
+behaviour down by driving Omarchy's own scripts against a fake `HOME`.
+
+On a Hyprland install without Omarchy, hyprlayout falls back to writing
+`disabled = true` into `monitors.lua` and the sidebar says so: there is nothing to
+switch the panel back on for you, so re-enable it before you undock.
 
 ## Logical pixels
 

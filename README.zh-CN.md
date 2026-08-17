@@ -41,6 +41,8 @@ Wayland 上常见的 `nwg-displays` 直接生成 hyprlang 语法的 `monitors.co
   (`monitors.lua.bak.<时间戳>`)，采用原子替换。
 - **不碰你的手写配置**：只接管自己的 managed block；`output = ""` 的兜底规则和当前
   未连接显示器的规则都原样保留。
+- **安全地关掉笔记本屏**：接着外接屏时可以关掉内置屏；一旦没有外接屏，它会自己回来 ——
+  **不管 app 有没有在运行**。详见下文。
 - **布局档案**：把「桌面坞站」「只用笔记本屏」存成 profile，按显示器指纹自动识别。
 - **热同步**：监听 Hyprland 的 socket2，插拔显示器后画布自动刷新（若有未应用的改动
   则只提示，不覆盖你的编辑）。
@@ -74,6 +76,9 @@ hyprlayout --dump                # 当前布局（JSON）
 hyprlayout --print-lua           # 打印对应的 monitors.lua 代码块
 hyprlayout --diff                # 预览写盘会产生的改动
 hyprlayout --save                # 把当前布局写入 monitors.lua（自动备份）
+hyprlayout --builtin off         # 关掉笔记本内置屏（坞站场景）
+hyprlayout --builtin on          # 重新打开
+hyprlayout --builtin toggle      # 来回切 —— 适合绑快捷键
 hyprlayout --save-profile dock   # 保存当前布局为 profile
 hyprlayout --apply-profile dock  # 应用 profile（脚本用，无确认倒计时）
 hyprlayout --list-profiles
@@ -123,6 +128,28 @@ Hyprland 0.56 的 Lua 配置改变了运行时接口，这里都做了自动回�
 
 注意 `hyprctl` 即使拒绝请求也返回 exit code 0（Lua 配置下 `keyword` 会回
 `can't work with non-legacy parsers`），所以成功与否只能看回复文本 —— 代码里就是这么判断的。
+
+## 关掉笔记本自带屏幕
+
+在侧栏把内置屏的 Enabled 关掉，或者执行 `hyprlayout --builtin off`。它**只在有外接屏连着时**
+保持关闭 —— 外接屏一拔，内置屏就自己亮回来，**跟这个 app 开不开无关**。
+
+这个保证不是 hyprlayout 自己造的。把 `disabled = true` 写进 `monitors.lua` 是个陷阱：
+没有任何东西会去删它，于是你下次离坞就是一台黑屏机器。Omarchy 已经备好了避开这个陷阱的零件，
+hyprlayout 只是往里面写：
+
+| 零件 | 作用 | 时机 |
+| --- | --- | --- |
+| `~/.local/state/omarchy/toggles/hypr/internal-monitor-disable.lua` | 真正的"关闭"规则放在这里；被 Hyprland 配置在 `monitors.lua` **之后** `require`，所以它生效 | 配置加载时 |
+| `omarchy-recover-internal-monitor.service` | 若物理上没接外接屏，就删掉这个文件 | 图形会话启动前 |
+| `omarchy-hyprland-monitor-watch` | 一旦没有活跃的外接输出，就把内置屏点回来 | 热插拔时 |
+
+所以即使内置屏处于关闭状态，`monitors.lua` 里保留的仍是一条**启用**规则 —— 因为 Omarchy 恢复
+内置屏时，正是从那条规则读取分辨率、位置和缩放。`tests/test_omarchy_contract.py` 用假 `HOME`
+驱动 Omarchy 自己的脚本，把这套行为固定下来。
+
+如果是没有 Omarchy 的纯 Hyprland，hyprlayout 会退回把 `disabled = true` 写进 `monitors.lua`，
+并在侧栏明确提示：这种情况下没有任何东西会替你把内置屏打开，离坞前请先自己恢复。
 
 ## 逻辑像素
 

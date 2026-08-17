@@ -5,8 +5,11 @@ monitor list -- but they never apply a layout or write a file: the suite that
 exercises the apply path mocks hyprctl out.
 """
 
+import os
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 try:
@@ -336,6 +339,78 @@ class AsyncApplyTests(unittest.TestCase):
         self.assertIn("boom", messages[-1])
         self.assertIsNone(self.window._busy)
         self.assertEqual(self.confirmed, [], "a failed apply must not ask to keep it")
+
+
+@unittest.skipUnless(HAVE_DISPLAY and HAVE_HYPRLAND, "needs a display and a running Hyprland")
+class BuiltinPanelTests(unittest.TestCase):
+    """Switching the laptop panel off has to land in Omarchy's toggle, not in
+    monitors.lua where nothing would ever remove it again."""
+
+    @classmethod
+    def setUpClass(cls):
+        Adw.init()
+
+    def setUp(self):
+        from hyprlayout import omarchy
+        from hyprlayout.window import MainWindow
+
+        self.omarchy = omarchy
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        env = mock.patch.dict(
+            os.environ,
+            {"XDG_STATE_HOME": str(root / "state"), "XDG_CONFIG_HOME": str(root / "config")},
+        )
+        env.start()
+        self.addCleanup(env.stop)
+        (root / "config" / "hypr").mkdir(parents=True)
+        self.config = root / "config" / "hypr" / "monitors.lua"
+
+        self.window = MainWindow(None)
+        self.window._toast = lambda *_: None
+        self.panel = omarchy.builtin(self.window.states)
+        if self.panel is None:
+            self.skipTest("this machine has no built-in panel")
+
+    def tearDown(self):
+        self.window.shutdown()
+        self.window = None
+
+    def test_sidebar_explains_the_recovery_for_a_laptop_panel(self):
+        self.window.canvas.select(self.panel.name)
+        subtitle = self.window.enabled_row.get_subtitle()
+        self.assertIn("back on", subtitle)
+
+    def test_switching_it_off_writes_the_toggle_and_keeps_an_enabled_rule(self):
+        self.panel.enabled = False
+        self.window._write_config()
+
+        self.assertTrue(self.omarchy.is_disabled(), "the toggle was not written")
+        self.assertIn(self.panel.name, self.omarchy.toggle_path().read_text())
+
+        written = self.config.read_text()
+        self.assertIn(f'output = "{self.panel.name}"', written)
+        self.assertNotIn(f'output = "{self.panel.name}", disabled = true', written)
+        self.assertIn("internal-monitor-disable", written)
+
+    def test_switching_it_back_on_clears_the_toggle(self):
+        self.panel.enabled = False
+        self.window._write_config()
+        self.assertTrue(self.omarchy.is_disabled())
+
+        self.panel.enabled = True
+        self.window._write_config()
+        self.assertFalse(self.omarchy.is_disabled(), "the toggle outlived the panel")
+
+    def test_a_disabled_external_still_goes_into_monitors_lua(self):
+        external = next((s for s in self.window.states if not s.is_builtin), None)
+        if external is None:
+            self.skipTest("needs an external output")
+        external.enabled = False
+        self.window._write_config()
+        self.assertIn(f'output = "{external.name}", disabled = true', self.config.read_text())
+        self.assertFalse(self.omarchy.is_disabled())
 
 
 if __name__ == "__main__":

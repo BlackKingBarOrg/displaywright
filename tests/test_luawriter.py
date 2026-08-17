@@ -84,6 +84,53 @@ class RenderTests(unittest.TestCase):
         self.assertLess(block.index('"eDP-1"'), block.index('"DP-1"'))
 
 
+class BuiltinToggleTests(unittest.TestCase):
+    """A switched-off laptop panel must not be written as disabled = true.
+
+    Nothing removes that line again, so unplugging the external display would
+    leave a black machine. The "off" belongs in Omarchy's toggle instead.
+    """
+
+    def panel(self, enabled=False):
+        return MonitorState(
+            name="eDP-1",
+            make="LG Display",
+            mode=Mode(3200, 2000, 120.0),
+            scale=2.0,
+            enabled=enabled,
+            available_modes=[Mode(3200, 2000, 120.0)],
+        )
+
+    def test_disabled_panel_is_written_as_an_enabled_rule(self):
+        block = luawriter.render_block([self.panel(), ultrawide()], toggle_builtin=True)
+        self.assertIn('hl.monitor({ output = "eDP-1", mode = "3200x2000@120"', block)
+        self.assertNotIn('output = "eDP-1", disabled = true', block)
+        self.assertIn("internal-monitor-disable", block)
+
+    def test_without_the_toggle_it_is_written_as_disabled(self):
+        block = luawriter.render_block([self.panel(), ultrawide()], toggle_builtin=False)
+        self.assertIn('hl.monitor({ output = "eDP-1", disabled = true })', block)
+        self.assertNotIn("internal-monitor-disable", block)
+
+    def test_an_enabled_panel_is_unaffected(self):
+        with_toggle = luawriter.render_block([self.panel(enabled=True)], toggle_builtin=True)
+        without = luawriter.render_block([self.panel(enabled=True)], toggle_builtin=False)
+        self.assertEqual(with_toggle, without)
+
+    def test_a_disabled_external_is_still_written_as_disabled(self):
+        block = luawriter.render_block(
+            [self.panel(enabled=True), ultrawide(enabled=False)], toggle_builtin=True
+        )
+        self.assertIn('hl.monitor({ output = "DP-1", disabled = true })', block)
+
+    def test_the_geometry_omarchy_restores_from_is_preserved(self):
+        # omarchy-hyprland-monitor-clamshell reads scale and position back out of
+        # monitors.lua when it switches the panel on again.
+        block = luawriter.render_block([self.panel()], toggle_builtin=True)
+        self.assertIn('position = "0x0"', block)
+        self.assertIn("scale = 2", block)
+
+
 class MergeTests(unittest.TestCase):
     def test_first_save_preserves_user_lines_and_comments_out_monitors(self):
         merged = luawriter.render_file(EXISTING, [laptop(), ultrawide()])

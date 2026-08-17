@@ -13,7 +13,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
-from . import __version__, hypr, luawriter
+from . import __version__, hypr, luawriter, omarchy
 from .canvas import LayoutCanvas
 from .model import (
     TRANSFORMS,
@@ -420,6 +420,18 @@ class MainWindow(Adw.ApplicationWindow):
                 self.output_row.set_selected(names.index(state.name))
 
             self.enabled_row.set_active(state.enabled)
+            if state.is_builtin and omarchy.has_safety_net():
+                self.enabled_row.set_subtitle(
+                    "Off while an external display is connected; Omarchy switches "
+                    "it back on when none is left"
+                )
+            elif state.is_builtin:
+                self.enabled_row.set_subtitle(
+                    "Turn the panel off — nothing on this system switches it back on "
+                    "automatically"
+                )
+            else:
+                self.enabled_row.set_subtitle("Turn the output off entirely")
             for row in rows:
                 row.set_sensitive(True)
             for row in rows[1:]:
@@ -790,20 +802,31 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _write_config(self) -> None:
         path = luawriter.default_config_path()
+        use_toggle = omarchy.available()
         try:
-            backup = luawriter.save(path, self.states)
+            backup = luawriter.save(path, self.states, toggle_builtin=use_toggle)
         except OSError as exc:
             self._toast(f"Could not write {path}: {exc}")
             return
+
+        note = None
+        if use_toggle:
+            try:
+                note = omarchy.sync(self.states)
+            except OSError as exc:
+                self._toast(f"Could not update the built-in display toggle: {exc}")
+
         message = f"Saved to {_display_path(path)}"
         if backup is not None:
             message += f" (backup: {backup.name})"
+        if note:
+            message += f" — {note}"
         self._toast(message)
 
     def _save_config_dialog(self) -> None:
         path = luawriter.default_config_path()
         try:
-            _, patch = luawriter.preview(path, self.states)
+            _, patch = luawriter.preview(path, self.states, toggle_builtin=omarchy.available())
         except OSError as exc:
             self._toast(f"Could not read {path}: {exc}")
             return
@@ -841,7 +864,7 @@ class MainWindow(Adw.ApplicationWindow):
         dialog.present(self)
 
     def _copy_lua(self) -> None:
-        text = luawriter.render_block(self.states)
+        text = luawriter.render_block(self.states, toggle_builtin=omarchy.available())
         clipboard = Gdk.Display.get_default().get_clipboard()
         clipboard.set(text)
         self._toast("Lua block copied to the clipboard")

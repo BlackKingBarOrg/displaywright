@@ -11,7 +11,7 @@ import json
 import sys
 from collections.abc import Sequence
 
-from . import __version__, hypr, luawriter
+from . import __version__, hypr, luawriter, omarchy
 from .model import MonitorState
 from .profiles import ProfileStore, state_to_json
 from .snapping import validate
@@ -32,6 +32,13 @@ def _parser() -> argparse.ArgumentParser:
                         help="show what --save would change in monitors.lua")
     parser.add_argument("--save", action="store_true",
                         help="write the current layout to ~/.config/hypr/monitors.lua")
+    parser.add_argument(
+        "--builtin",
+        choices=("on", "off", "toggle"),
+        help="switch the built-in laptop panel on or off. Off is kept only while an "
+             "external display is connected: Omarchy switches the panel back on when "
+             "none is left, whether or not this tool is running",
+    )
     parser.add_argument("--list-profiles", action="store_true", help="list saved profiles")
     parser.add_argument("--apply-profile", metavar="NAME",
                         help="apply a saved profile with hyprctl (no confirmation prompt)")
@@ -42,6 +49,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def _describe(states: Sequence[MonitorState]) -> str:
     lines = []
+    if omarchy.is_disabled():
+        lines.append(
+            "  built-in panel held off by Omarchy's internal-monitor-disable toggle"
+        )
     for s in states:
         flag = " " if s.enabled else "×"
         w, h = s.logical_size
@@ -52,11 +63,55 @@ def _describe(states: Sequence[MonitorState]) -> str:
     return "\n".join(lines)
 
 
+def _switch_builtin(action: str, states: list[MonitorState]) -> int:
+    """Turn the laptop panel off (or back on) the way Omarchy can recover from."""
+    panel = omarchy.builtin(states)
+    if panel is None:
+        print("hyprlayout: no built-in display found", file=sys.stderr)
+        return 1
+
+    turn_off = action == "off" or (action == "toggle" and not omarchy.is_disabled())
+
+    if turn_off:
+        if not [s for s in states if not s.is_builtin and s.enabled]:
+            print(
+                "hyprlayout: refusing to switch off the only display — connect an "
+                "external display first",
+                file=sys.stderr,
+            )
+            return 1
+        panel.enabled = False
+        try:
+            hypr.apply_states(states)
+        except hypr.HyprError as exc:
+            print(f"hyprlayout: {exc}", file=sys.stderr)
+            return 1
+        if omarchy.available():
+            omarchy.disable_builtin(panel.name)
+            print(
+                f"{panel.name} off. It comes back automatically when no external "
+                "display is left."
+            )
+        else:
+            print(f"{panel.name} off for this session only (no Omarchy toggle here).")
+        return 0
+
+    cleared = omarchy.enable_builtin() if omarchy.available() else False
+    try:
+        # A reload re-applies monitors.lua, which restores the panel's geometry.
+        hypr.reload_config()
+    except hypr.HyprError as exc:
+        print(f"hyprlayout: {exc}", file=sys.stderr)
+        return 1
+    print(f"{panel.name} on{' (toggle cleared)' if cleared else ''}.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     wants_cli = any(
         (args.status, args.dump, args.print_lua, args.diff, args.save,
-         args.list_profiles, args.apply_profile, args.save_profile)
+         args.list_profiles, args.apply_profile, args.save_profile, args.builtin)
     )
 
     if not wants_cli:
@@ -86,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
     except hypr.HyprError as exc:
         print(f"hyprlayout: {exc}", file=sys.stderr)
         return 1
+
+    if args.builtin:
+        code = _switch_builtin(args.builtin, states)
+        if code:
+            return code
+        states = hypr.read_monitors()
 
     if args.apply_profile:
         store = ProfileStore()

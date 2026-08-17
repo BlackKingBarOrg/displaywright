@@ -44,17 +44,35 @@ def render_call(state: MonitorState) -> str:
     return state.lua_call()
 
 
-def render_block(states: Sequence[MonitorState]) -> str:
-    """The full managed block, including its markers."""
+def render_block(states: Sequence[MonitorState], toggle_builtin: bool = False) -> str:
+    """The full managed block, including its markers.
+
+    With ``toggle_builtin`` set, a switched-off laptop panel is still written as
+    an *enabled* rule. Its "off" lives in Omarchy's
+    ``internal-monitor-disable.lua`` toggle instead, which is the only place that
+    something removes again when the external display goes away. The rule left
+    here is what Omarchy reads to restore the panel's mode, position and scale.
+    """
     lines = [BEGIN, _HEADER.rstrip("\n")]
     for state in sorted(states, key=lambda s: (not s.enabled, s.x, s.y, s.name)):
-        label = state.pretty_name
-        detail = state.summary()
-        if label and label != state.name:
-            lines.append(f"-- {state.name}: {label} — {detail}")
+        via_toggle = toggle_builtin and state.is_builtin and not state.enabled
+        written = state
+        if via_toggle:
+            written = state.copy()
+            written.enabled = True
+        label = written.pretty_name
+        detail = written.summary()
+        if label and label != written.name:
+            lines.append(f"-- {written.name}: {label} — {detail}")
         else:
-            lines.append(f"-- {state.name}: {detail}")
-        lines.append(render_call(state))
+            lines.append(f"-- {written.name}: {detail}")
+        if via_toggle:
+            lines.append(
+                "-- currently switched off via Omarchy's internal-monitor-disable "
+                "toggle,\n-- which comes back automatically when no external display "
+                "is left."
+            )
+        lines.append(render_call(written))
     lines.append(END)
     return "\n".join(lines) + "\n"
 
@@ -130,8 +148,10 @@ def merge(existing: str, block: str, managed: set[str] | None = None) -> str:
     return f"{body}{separator}{note}{block}"
 
 
-def render_file(existing: str, states: Sequence[MonitorState]) -> str:
-    return merge(existing, render_block(states), {s.name for s in states})
+def render_file(
+    existing: str, states: Sequence[MonitorState], toggle_builtin: bool = False
+) -> str:
+    return merge(existing, render_block(states, toggle_builtin), {s.name for s in states})
 
 
 def diff(old: str, new: str, path: str = "monitors.lua") -> str:
@@ -145,17 +165,24 @@ def diff(old: str, new: str, path: str = "monitors.lua") -> str:
     return "".join(lines)
 
 
-def preview(path: Path, states: Sequence[MonitorState]) -> tuple[str, str]:
+def preview(
+    path: Path, states: Sequence[MonitorState], toggle_builtin: bool = False
+) -> tuple[str, str]:
     """``(new_text, unified_diff)`` for what :func:`save` would write."""
     existing = path.read_text() if path.exists() else ""
-    new_text = render_file(existing, states)
+    new_text = render_file(existing, states, toggle_builtin)
     return new_text, diff(existing, new_text, path.name)
 
 
-def save(path: Path, states: Sequence[MonitorState], backup: bool = True) -> Path | None:
+def save(
+    path: Path,
+    states: Sequence[MonitorState],
+    backup: bool = True,
+    toggle_builtin: bool = False,
+) -> Path | None:
     """Write the layout to ``path``; returns the backup path if one was made."""
     existing = path.read_text() if path.exists() else ""
-    new_text = render_file(existing, states)
+    new_text = render_file(existing, states, toggle_builtin)
 
     backup_path: Path | None = None
     if backup and existing:
