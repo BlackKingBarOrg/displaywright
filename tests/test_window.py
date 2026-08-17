@@ -108,7 +108,19 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window._style_handler, 0)
         self.window.shutdown()  # idempotent
 
-    def test_normalize_reports_when_there_is_nothing_to_do(self):
+    def test_normalize_moves_the_layout_to_the_origin(self):
+        # Do not assume the machine's live layout starts at the origin: create a
+        # known offset, then check both the move and the follow-up no-op.
+        from hyprlayout.model import bounding_box
+
+        for state in self.window.states:
+            state.y += 300
+        self.window._normalize()
+        self.assertEqual(self.toasts[-1], "Layout moved to origin")
+        box = bounding_box([s.rect for s in self.window.states if s.enabled])
+        self.assertEqual((box.x, box.y), (0.0, 0.0))
+
+        self.toasts.clear()
         self.window._normalize()
         self.assertEqual(self.toasts, ["Already at the origin"])
 
