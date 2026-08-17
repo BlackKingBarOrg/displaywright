@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest something hyprlayout should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The situation you are in, not the solution you have in mind.
+      placeholder: |
+        I dock and undock several times a day and want the layout to follow ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: If you already have a design in mind, describe it here.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today
+      description: Workarounds, other tools, manual config edits.
+    validations:
+      required: false

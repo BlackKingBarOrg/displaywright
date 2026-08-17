@@ -1,5 +1,9 @@
 # hyprlayout
 
+*[English](README.md)*
+
+![hyprlayout 界面：左侧可拖拽的显示器画布，右侧逐屏参数](docs/screenshot.png)
+
 用鼠标拖拽来排列 Hyprland 的显示器布局 —— 一个 GTK4 / libadwaita 图形工具，
 针对 Omarchy（Lua 配置）做了适配。
 

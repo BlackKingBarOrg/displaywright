@@ -6,17 +6,21 @@ monitor list -- but they never apply or write anything.
 
 import unittest
 
-import gi
+try:
+    import gi
 
-gi.require_version("Gtk", "4.0")
-gi.require_version("Gdk", "4.0")
-gi.require_version("Adw", "1")
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, Gtk
 
-from gi.repository import Adw, Gtk  # noqa: E402
+    HAVE_GTK = True
+except (ImportError, ValueError):  # PyGObject, GTK4 or libadwaita is missing
+    HAVE_GTK = False
 
 from hyprlayout import hypr, luawriter
 
-HAVE_DISPLAY = Gtk.init_check()
+HAVE_DISPLAY = HAVE_GTK and Gtk.init_check()
 HAVE_HYPRLAND = hypr.is_running()
 
 

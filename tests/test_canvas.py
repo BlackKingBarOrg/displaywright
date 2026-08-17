@@ -2,16 +2,20 @@
 
 import unittest
 
-import gi
+try:
+    import gi
 
-gi.require_version("Gtk", "4.0")
-gi.require_version("Gdk", "4.0")
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk, Gtk
 
-from gi.repository import Gdk, Gtk  # noqa: E402
+    HAVE_GTK = True
+except (ImportError, ValueError):  # PyGObject or the GTK4 typelib is missing
+    HAVE_GTK = False
 
 from hyprlayout.model import Mode, MonitorState
 
-HAVE_DISPLAY = Gtk.init_check()
+HAVE_DISPLAY = HAVE_GTK and Gtk.init_check()
 
 
 def monitor(name, w, h, x=0, y=0, scale=1.0):

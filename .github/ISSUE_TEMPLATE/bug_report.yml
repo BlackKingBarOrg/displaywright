@@ -1,0 +1,72 @@
+name: Bug report
+description: Something behaves differently than you expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Display setups vary wildly, so the `hyprctl` output below is usually what
+        makes a report reproducible. Please paste it even if it seems irrelevant.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what did the tool do instead of what you expected?
+      placeholder: |
+        I dragged DP-1 below eDP-1 and pressed Apply. Instead of ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: hyprctl-version
+    attributes:
+      label: Hyprland version
+      description: Output of `hyprctl version`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: monitors
+    attributes:
+      label: Monitors
+      description: Output of `hyprctl monitors all -j`
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: hyprlayout's view of the layout
+      description: Output of `hyprlayout --status`
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: config-style
+    attributes:
+      label: Hyprland config style
+      description: Lua (`hyprland.lua`, e.g. Omarchy) or hyprlang (`hyprland.conf`)?
+      placeholder: Lua / hyprlang
+    validations:
+      required: true
+
+  - type: textarea
+    id: generated-config
+    attributes:
+      label: Generated config (if the report is about writing monitors.lua)
+      description: Output of `hyprlayout --diff`
+      render: diff
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Errors printed in the terminal, a screenshot, versions of GTK/libadwaita.
+    validations:
+      required: false
