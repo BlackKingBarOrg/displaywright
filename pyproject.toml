@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hyprlayout"
+version = "0.1.0"
+description = "Drag-and-drop display arrangement for Hyprland"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["hyprland", "wayland", "monitors", "display", "omarchy", "gtk4"]
+classifiers = [
+  "Environment :: X11 Applications :: GTK",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Desktop Environment :: Window Managers",
+]
+# PyGObject, GTK4 and libadwaita are expected from the system packages
+# (python-gobject, gtk4, libadwaita) rather than pip.
+dependencies = []
+
+[project.scripts]
+hyprlayout = "hyprlayout.cli:main"
+
+[tool.setuptools]
+packages = ["hyprlayout"]
+
+[tool.setuptools.data-files]
+"share/applications" = ["data/hyprlayout.desktop"]
