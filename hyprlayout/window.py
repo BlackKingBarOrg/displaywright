@@ -334,7 +334,7 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             labels = [f"{s.name} — {s.pretty_name}" if s.pretty_name != s.name else s.name
                       for s in self.states]
-            self.output_row.set_model(Gtk.StringList.new(labels))
+            _set_string_model(self.output_row, labels)
         finally:
             self._updating = False
 
@@ -363,7 +363,7 @@ class MainWindow(Adw.ApplicationWindow):
 
             # Resolution / refresh split so long mode lists stay usable.
             resolutions = _resolutions(state)
-            self.resolution_row.set_model(Gtk.StringList.new(["Preferred", *resolutions]))
+            _set_string_model(self.resolution_row, ["Preferred", *resolutions])
             if state.mode is None:
                 self.resolution_row.set_selected(0)
             else:
@@ -373,7 +373,7 @@ class MainWindow(Adw.ApplicationWindow):
                 )
 
             refreshes = _refresh_rates(state, state.mode)
-            self.refresh_row.set_model(Gtk.StringList.new([f"{r:g} Hz" for r in refreshes]))
+            _set_string_model(self.refresh_row, [f"{r:g} Hz" for r in refreshes])
             self.refresh_row.set_sensitive(state.enabled and bool(refreshes) and state.mode is not None)
             if state.mode is not None and state.mode.refresh in refreshes:
                 self.refresh_row.set_selected(refreshes.index(state.mode.refresh))
@@ -385,7 +385,7 @@ class MainWindow(Adw.ApplicationWindow):
             )
 
             others = [s.name for s in self.states if s.name != state.name]
-            self.mirror_row.set_model(Gtk.StringList.new(["None", *others]))
+            _set_string_model(self.mirror_row, ["None", *others])
             self.mirror_row.set_selected(
                 others.index(state.mirror_of) + 1
                 if state.mirror_of in others else 0
@@ -432,6 +432,8 @@ class MainWindow(Adw.ApplicationWindow):
         state = self._selected()
         if state is None:
             return
+        if row.get_active() == state.enabled:
+            return
         state.enabled = row.get_active()
         if state.enabled and state.mode is None and state.available_modes:
             state.mode = state.preferred_mode()
@@ -443,7 +445,7 @@ class MainWindow(Adw.ApplicationWindow):
             return
         index = row.get_selected()
         if index <= 0:
-            state.mode = None
+            wanted = None
         else:
             resolutions = _resolutions(state)
             if index - 1 >= len(resolutions):
@@ -453,8 +455,11 @@ class MainWindow(Adw.ApplicationWindow):
                 m for m in state.available_modes if m.width == width and m.height == height
             ]
             keep = state.mode.refresh if state.mode else 0.0
-            state.mode = min(candidates, key=lambda m: abs(m.refresh - keep)) if candidates \
+            wanted = min(candidates, key=lambda m: abs(m.refresh - keep)) if candidates \
                 else Mode(width, height)
+        if wanted == state.mode:
+            return
+        state.mode = wanted
         self._after_edit()
 
     def _on_refresh_changed(self, row: Adw.ComboRow, _param) -> None:
@@ -463,15 +468,22 @@ class MainWindow(Adw.ApplicationWindow):
             return
         rates = _refresh_rates(state, state.mode)
         index = row.get_selected()
-        if 0 <= index < len(rates):
-            state.mode = Mode(state.mode.width, state.mode.height, rates[index])
+        if not (0 <= index < len(rates)):
+            return
+        wanted = Mode(state.mode.width, state.mode.height, rates[index])
+        if wanted == state.mode:
+            return
+        state.mode = wanted
         self._after_edit()
 
     def _on_scale_changed(self, row: Adw.SpinRow, _param) -> None:
         state = self._selected()
         if state is None:
             return
-        state.scale = round(row.get_value(), 4)
+        scale = round(row.get_value(), 4)
+        if abs(scale - state.scale) < 1e-9:
+            return
+        state.scale = scale
         self._after_edit()
 
     def _on_scale_preset(self, _button: Gtk.Button, preset: float) -> None:
@@ -492,14 +504,20 @@ class MainWindow(Adw.ApplicationWindow):
         state = self._selected()
         if state is None:
             return
-        state.transform = int(row.get_selected())
+        transform = int(row.get_selected())
+        if transform == state.transform:
+            return
+        state.transform = transform
         self._after_edit()
 
     def _on_vrr_changed(self, row: Adw.ComboRow, _param) -> None:
         state = self._selected()
         if state is None:
             return
-        state.vrr = VRR_CHOICES[int(row.get_selected())][1]
+        vrr = VRR_CHOICES[int(row.get_selected())][1]
+        if vrr == state.vrr:
+            return
+        state.vrr = vrr
         self._after_edit()
 
     def _on_mirror_changed(self, row: Adw.ComboRow, _param) -> None:
@@ -508,15 +526,20 @@ class MainWindow(Adw.ApplicationWindow):
             return
         index = int(row.get_selected())
         others = [s.name for s in self.states if s.name != state.name]
-        state.mirror_of = others[index - 1] if 0 < index <= len(others) else None
+        mirror = others[index - 1] if 0 < index <= len(others) else None
+        if mirror == state.mirror_of:
+            return
+        state.mirror_of = mirror
         self._after_edit()
 
     def _on_position_changed(self, _row: Adw.SpinRow, _param) -> None:
         state = self._selected()
         if state is None:
             return
-        state.x = int(self.x_row.get_value())
-        state.y = int(self.y_row.get_value())
+        x, y = int(self.x_row.get_value()), int(self.y_row.get_value())
+        if (x, y) == (state.x, state.y):
+            return
+        state.x, state.y = x, y
         self._after_edit()
 
     # ------------------------------------------------------------ layout tools
@@ -822,6 +845,25 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_close(self, *_args) -> bool:
         self.shutdown()
         return False
+
+
+def _set_string_model(row: Adw.ComboRow, items: Sequence[str]) -> None:
+    """Replace a combo row's model only when its contents actually change.
+
+    Setting a model re-emits notify::selected, so a handler that reacts by
+    rebuilding the model loops forever and the window stops responding. Skipping
+    identical updates cuts that at the source.
+    """
+    model = row.get_model()
+    items = list(items)
+    unchanged = (
+        model is not None
+        and model.get_n_items() == len(items)
+        and all(model.get_string(i) == items[i] for i in range(len(items)))
+    )
+    if unchanged:
+        return
+    row.set_model(Gtk.StringList.new(items))
 
 
 def _resolutions(state: MonitorState) -> list[str]:

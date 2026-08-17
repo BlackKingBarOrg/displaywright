@@ -132,5 +132,99 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.toasts, ["Already at the origin"])
 
 
+@unittest.skipUnless(HAVE_DISPLAY and HAVE_HYPRLAND, "needs a display and a running Hyprland")
+class SidebarFeedbackTests(unittest.TestCase):
+    """Changing a sidebar row must not make the sidebar rebuild itself forever.
+
+    Setting a model on an Adw.ComboRow re-emits notify::selected. A handler that
+    reacts by rebuilding that model livelocks the window: the app freezes hard,
+    burns CPU, and eventually trips `g_object_notify_by_pspec: assertion
+    G_IS_OBJECT (object) failed` and dies. That is what happened when picking a
+    refresh rate, and defeating the fix reproduces the crash from these tests.
+    """
+
+    RUNAWAY = 25
+
+    @classmethod
+    def setUpClass(cls):
+        Adw.init()
+
+    def setUp(self):
+        from hyprlayout.window import MainWindow
+
+        self.window = MainWindow(None)
+        self.syncs = 0
+        real_sync = self.window._sync_sidebar
+
+        def counting_sync():
+            self.syncs += 1
+            if self.syncs > self.RUNAWAY:
+                raise AssertionError(
+                    f"_sync_sidebar ran away: {self.syncs} calls for one interaction"
+                )
+            return real_sync()
+
+        # _after_edit looks the method up on the instance, so this intercepts it.
+        self.window._sync_sidebar = counting_sync
+
+    def tearDown(self):
+        self.window.shutdown()
+        self.window = None
+
+    def _poke(self, description, action):
+        self.syncs = 0
+        action()
+        self.assertLessEqual(
+            self.syncs, 5, f"{description} triggered {self.syncs} sidebar rebuilds"
+        )
+
+    def test_each_row_settles_after_one_change(self):
+        state = self.window.canvas.selected_state()
+        others = [s.name for s in self.window.states if s.name != state.name]
+
+        self._poke("rotation", lambda: self.window.rotation_row.set_selected(1))
+        self._poke("vrr", lambda: self.window.vrr_row.set_selected(2))
+        self._poke("scale", lambda: self.window.scale_row.set_value(1.5))
+        self._poke("x", lambda: self.window.x_row.set_value(120))
+        self._poke("y", lambda: self.window.y_row.set_value(240))
+        if others:
+            self._poke("mirror", lambda: self.window.mirror_row.set_selected(1))
+        self._poke("enabled off", lambda: self.window.enabled_row.set_active(False))
+        self._poke("enabled on", lambda: self.window.enabled_row.set_active(True))
+
+    def test_every_resolution_and_refresh_selection_terminates(self):
+        # The reported scenario: walk every mode the UI offers, on every output.
+        for state in self.window.states:
+            self.window.canvas.select(state.name)
+            res_model = self.window.resolution_row.get_model()
+            for r in range(res_model.get_n_items() if res_model else 0):
+                self._poke(
+                    f"{state.name} resolution[{r}]",
+                    lambda r=r: self.window.resolution_row.set_selected(r),
+                )
+                ref_model = self.window.refresh_row.get_model()
+                for f in range(ref_model.get_n_items() if ref_model else 0):
+                    self._poke(
+                        f"{state.name} refresh[{f}]",
+                        lambda f=f: self.window.refresh_row.set_selected(f),
+                    )
+
+    def test_reselecting_the_current_value_changes_nothing(self):
+        # A no-op selection must not mark the layout dirty either.
+        self.assertFalse(self.window.dirty)
+        row = self.window.resolution_row
+        self._poke("same resolution", lambda: row.set_selected(row.get_selected()))
+        rate_row = self.window.refresh_row
+        self._poke("same refresh", lambda: rate_row.set_selected(rate_row.get_selected()))
+        self.assertFalse(self.window.dirty, "re-selecting the current mode marked it dirty")
+
+    def test_switching_outputs_does_not_loop(self):
+        names = [s.name for s in self.window.states]
+        if len(names) < 2:
+            self.skipTest("needs at least two outputs")
+        for name in names + names[::-1]:
+            self._poke(f"select {name}", lambda name=name: self.window.canvas.select(name))
+
+
 if __name__ == "__main__":
     unittest.main()
