@@ -7,8 +7,8 @@ monitor rule.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
 
 from .model import MonitorState, Rect, bounding_box
 
@@ -77,7 +77,7 @@ def snap_position(
             y = best_y[0]
             guides.append(("h", best_y[1]))
 
-    return SnapResult(int(round(x)), int(round(y)), guides)
+    return SnapResult(round(x), round(y), guides)
 
 
 def push_out(moving: Rect, others: Sequence[Rect]) -> tuple[int, int]:
@@ -96,7 +96,7 @@ def push_out(moving: Rect, others: Sequence[Rect]) -> tuple[int, int]:
             (current.bottom - hit.y, (x, hit.y - current.h)),
         ]
         _, (x, y) = min(options, key=lambda o: o[0])
-    return int(round(x)), int(round(y))
+    return round(x), round(y)
 
 
 def snap_and_resolve(
@@ -126,7 +126,7 @@ def normalize(states: Iterable[MonitorState]) -> bool:
     if not states:
         return False
     box = bounding_box([s.rect for s in states])
-    dx, dy = -int(round(box.x)), -int(round(box.y))
+    dx, dy = -round(box.x), -round(box.y)
     if dx == 0 and dy == 0:
         return False
     for s in states:
@@ -142,11 +142,12 @@ def auto_arrange(states: Iterable[MonitorState]) -> None:
         return
     enabled.sort(key=lambda s: (s.x, s.y))
     tallest = max(s.logical_size[1] for s in enabled)
-    cursor = 0
+    cursor = 0.0
     for s in enabled:
         w, h = s.logical_size
-        s.x = int(round(cursor))
-        s.y = int(round((tallest - h) / 2))
+        # Positions must stay integral: Hyprland parses "1600x0", not "1600.0x0".
+        s.x = round(cursor)
+        s.y = round((tallest - h) / 2)
         cursor += w
 
 

@@ -7,7 +7,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, Gtk
 
 from . import APP_ID
 from .window import MainWindow
@@ -23,7 +23,7 @@ class HyprlayoutApp(Adw.Application):
     def __init__(self) -> None:
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
 
-    def do_startup(self) -> None:  # noqa: N802 - GObject naming
+    def do_startup(self) -> None:
         Adw.Application.do_startup(self)
 
         display = Gdk.Display.get_default()
@@ -39,7 +39,7 @@ class HyprlayoutApp(Adw.Application):
         self.add_action(quit_action)
         self.set_accels_for_action("app.quit", ["<Control>q", "<Control>w"])
 
-    def do_activate(self) -> None:  # noqa: N802 - GObject naming
+    def do_activate(self) -> None:
         window = self.props.active_window
         if window is None:
             window = MainWindow(self)

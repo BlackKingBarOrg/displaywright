@@ -60,9 +60,9 @@ class ReadMonitorsTests(unittest.TestCase):
         self.assertFalse(states[-1].enabled)
 
     def test_bad_json_raises_hypr_error(self):
-        with mock.patch.object(hypr, "_run", return_value="not json"):
-            with self.assertRaises(hypr.HyprError):
-                hypr.read_monitors()
+        with mock.patch.object(hypr, "_run", return_value="not json"), \
+                self.assertRaises(hypr.HyprError):
+            hypr.read_monitors()
 
 
 def sample_states():
@@ -104,9 +104,9 @@ class ApplyTests(unittest.TestCase):
     def test_lua_config_rejects_keyword_and_that_is_reported(self):
         # Real reply from Hyprland 0.56 with a Lua config.
         reply = "keyword can't work with non-legacy parsers. Use eval."
-        with mock.patch.object(hypr, "_run", return_value=reply):
-            with self.assertRaises(hypr.HyprError) as caught:
-                hypr.apply_states(sample_states())
+        with mock.patch.object(hypr, "_run", return_value=reply), \
+                self.assertRaises(hypr.HyprError) as caught:
+            hypr.apply_states(sample_states())
         self.assertIn("can't work", str(caught.exception))
 
     def test_no_monitors_is_a_no_op(self):
@@ -130,9 +130,9 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
 
     def test_raises_when_nothing_is_accepted(self):
-        with mock.patch.object(hypr, "_run", return_value="error: nope"):
-            with self.assertRaises(hypr.HyprError) as caught:
-                hypr.dispatch("a", "b")
+        with mock.patch.object(hypr, "_run", return_value="error: nope"), \
+                self.assertRaises(hypr.HyprError) as caught:
+            hypr.dispatch("a", "b")
         self.assertIn("nope", str(caught.exception))
 
     def test_focus_monitor_prefers_the_lua_form(self):
@@ -159,9 +159,9 @@ class MiscTests(unittest.TestCase):
 
     def test_failed_hyprctl_becomes_hypr_error(self):
         completed = mock.Mock(returncode=1, stdout="", stderr="boom")
-        with mock.patch("subprocess.run", return_value=completed):
-            with self.assertRaises(hypr.HyprError):
-                hypr._run(["monitors"])
+        with mock.patch("subprocess.run", return_value=completed), \
+                self.assertRaises(hypr.HyprError):
+            hypr._run(["monitors"])
 
 
 @unittest.skipUnless(hypr.is_running(), "needs a running Hyprland")
@@ -182,7 +182,7 @@ class LiveTests(unittest.TestCase):
         hypr.apply_states(before)  # raises HyprError if the compositor refuses
         after = hypr.read_monitors()
         self.assertEqual(len(before), len(after))
-        for a, b in zip(before, after):
+        for a, b in zip(before, after, strict=False):
             self.assertTrue(a.config_equals(b), f"{a.name} changed unexpectedly")
 
     def test_event_listener_connects_and_stops(self):

@@ -89,6 +89,31 @@ class LayoutOpTests(unittest.TestCase):
         states = [monitor("A", 1920, 1080, x=0), monitor("B", 1920, 1080, x=-9000, enabled=False)]
         self.assertFalse(normalize(states))
 
+    def test_auto_arrange_keeps_positions_integral(self):
+        # A float here reaches Hyprland as "1600.0x0" and gets rejected -- and an
+        # equality assertion would not notice, since 1600.0 == 1600.
+        states = [
+            monitor("A", 3200, 2000, scale=2.0),
+            monitor("B", 3440, 1440, x=5000, scale=1.25),
+            monitor("C", 1920, 1080, x=9000),
+        ]
+        auto_arrange(states)
+        for s in states:
+            self.assertIsInstance(s.x, int, f"{s.name}.x is {type(s.x).__name__}")
+            self.assertIsInstance(s.y, int, f"{s.name}.y is {type(s.y).__name__}")
+            self.assertNotIn(".", s.rule_args().split(",")[2])
+
+    def test_snapping_keeps_positions_integral(self):
+        result = snap_and_resolve(Rect(1590.4, 20.7, 2752.0, 1152.0), [Rect(0, 0, 1600, 1000)])
+        self.assertIsInstance(result.x, int)
+        self.assertIsInstance(result.y, int)
+
+    def test_normalize_keeps_positions_integral(self):
+        states = [monitor("A", 3440, 1440, x=-500, y=-200, scale=1.25)]
+        normalize(states)
+        self.assertIsInstance(states[0].x, int)
+        self.assertIsInstance(states[0].y, int)
+
     def test_auto_arrange_packs_left_to_right_and_centres(self):
         states = [
             monitor("A", 3200, 2000, x=0, scale=2.0),   # logical 1600x1000

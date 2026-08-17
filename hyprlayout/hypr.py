@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import socket
 import subprocess
 import threading
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
 
 from .model import MonitorState
 
@@ -135,10 +136,8 @@ def move_cursor(x: int, y: int) -> None:
 
 def notify(message: str, ms: int = 3000, icon: int = 1) -> None:
     """Best-effort on-screen notification through Hyprland itself."""
-    try:
+    with contextlib.suppress(HyprError):
         _run(["notify", str(icon), str(ms), "rgb(8aadf4)", message])
-    except HyprError:
-        pass
 
 
 class EventListener:
@@ -184,10 +183,8 @@ class EventListener:
         self._stop.set()
         sock, self._sock = self._sock, None
         if sock is not None:
-            try:
+            with contextlib.suppress(OSError):
                 sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
             sock.close()
 
     def _loop(self) -> None:

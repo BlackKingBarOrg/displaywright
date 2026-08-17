@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from . import __version__, hypr, luawriter
 from .canvas import LayoutCanvas
@@ -363,7 +363,7 @@ class MainWindow(Adw.ApplicationWindow):
 
             # Resolution / refresh split so long mode lists stay usable.
             resolutions = _resolutions(state)
-            self.resolution_row.set_model(Gtk.StringList.new(["Preferred"] + resolutions))
+            self.resolution_row.set_model(Gtk.StringList.new(["Preferred", *resolutions]))
             if state.mode is None:
                 self.resolution_row.set_selected(0)
             else:
@@ -385,7 +385,7 @@ class MainWindow(Adw.ApplicationWindow):
             )
 
             others = [s.name for s in self.states if s.name != state.name]
-            self.mirror_row.set_model(Gtk.StringList.new(["None"] + others))
+            self.mirror_row.set_model(Gtk.StringList.new(["None", *others]))
             self.mirror_row.set_selected(
                 others.index(state.mirror_of) + 1
                 if state.mirror_of in others else 0

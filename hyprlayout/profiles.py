@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 from .model import Mode, MonitorState
 
@@ -69,7 +69,7 @@ class Profile:
         return {"fingerprint": self.fingerprint, "monitors": self.monitors}
 
     @classmethod
-    def from_states(cls, name: str, states: Sequence[MonitorState]) -> "Profile":
+    def from_states(cls, name: str, states: Sequence[MonitorState]) -> Profile:
         return cls(name, fingerprint(states), [state_to_json(s) for s in states])
 
     def apply_to(self, live: Sequence[MonitorState]) -> list[str]:

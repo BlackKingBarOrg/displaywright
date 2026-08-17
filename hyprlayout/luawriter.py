@@ -16,8 +16,8 @@ import difflib
 import os
 import re
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .model import MonitorState
 

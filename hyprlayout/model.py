@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from typing import Iterable
 
 # transform -> (label, rotates 90 degrees?)
 TRANSFORMS: dict[int, tuple[str, bool]] = {
@@ -45,7 +45,7 @@ class Mode:
     refresh: float = 0.0
 
     @classmethod
-    def parse(cls, text: str) -> "Mode | None":
+    def parse(cls, text: str) -> Mode | None:
         m = _MODE_RE.match(text)
         if not m:
             return None
@@ -133,7 +133,7 @@ class MonitorState:
         return w / scale, h / scale
 
     @property
-    def rect(self) -> "Rect":
+    def rect(self) -> Rect:
         w, h = self.logical_size
         return Rect(float(self.x), float(self.y), w, h)
 
@@ -176,10 +176,10 @@ class MonitorState:
 
     # ------------------------------------------------------------------- misc
 
-    def copy(self) -> "MonitorState":
+    def copy(self) -> MonitorState:
         return replace(self, available_modes=list(self.available_modes))
 
-    def config_equals(self, other: "MonitorState") -> bool:
+    def config_equals(self, other: MonitorState) -> bool:
         """Compare only the fields we actually push to Hyprland."""
         keys = ("enabled", "mode", "scale", "transform", "x", "y", "vrr", "mirror_of")
         return all(getattr(self, k) == getattr(other, k) for k in keys)
@@ -187,7 +187,7 @@ class MonitorState:
     # ------------------------------------------------------------- hyprland I/O
 
     @classmethod
-    def from_hyprctl(cls, data: dict) -> "MonitorState":
+    def from_hyprctl(cls, data: dict) -> MonitorState:
         """Build a state from one entry of ``hyprctl monitors all -j``."""
         modes: list[Mode] = []
         for raw in data.get("availableModes", []) or []:
@@ -319,7 +319,7 @@ class Rect:
     def contains(self, px: float, py: float) -> bool:
         return self.x <= px <= self.right and self.y <= py <= self.bottom
 
-    def overlaps(self, other: "Rect", tol: float = 0.5) -> bool:
+    def overlaps(self, other: Rect, tol: float = 0.5) -> bool:
         return (
             self.x < other.right - tol
             and other.x < self.right - tol
@@ -327,7 +327,7 @@ class Rect:
             and other.y < self.bottom - tol
         )
 
-    def moved(self, x: float, y: float) -> "Rect":
+    def moved(self, x: float, y: float) -> Rect:
         return Rect(x, y, self.w, self.h)
 
 

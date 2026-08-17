@@ -33,16 +33,16 @@ def laptop():
 
 
 def ultrawide(**kwargs):
-    defaults = dict(
-        name="DP-1",
-        make="CSF",
-        model="CS3421",
-        mode=Mode(3440, 1440, 50.0),
-        scale=1.0,
-        x=1600,
-        y=0,
-        available_modes=[Mode(3440, 1440, 50.0)],
-    )
+    defaults = {
+        "name": "DP-1",
+        "make": "CSF",
+        "model": "CS3421",
+        "mode": Mode(3440, 1440, 50.0),
+        "scale": 1.0,
+        "x": 1600,
+        "y": 0,
+        "available_modes": [Mode(3440, 1440, 50.0)],
+    }
     defaults.update(kwargs)
     return MonitorState(**defaults)
 

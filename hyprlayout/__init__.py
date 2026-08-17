@@ -3,4 +3,4 @@
 __version__ = "0.1.0"
 APP_ID = "ai.bkblab.hyprlayout"
 
-__all__ = ["__version__", "APP_ID"]
+__all__ = ["APP_ID", "__version__"]

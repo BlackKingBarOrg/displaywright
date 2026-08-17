@@ -9,7 +9,8 @@ neighbours' edges.
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from collections.abc import Sequence
+from typing import ClassVar
 
 import gi
 
@@ -17,7 +18,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("PangoCairo", "1.0")
 
-from gi.repository import Gdk, GObject, Gtk, Pango, PangoCairo  # noqa: E402
+from gi.repository import Gdk, GObject, Gtk, Pango, PangoCairo
 
 from .model import MonitorState, Rect, bounding_box
 from .snapping import snap_and_resolve
@@ -58,7 +59,7 @@ class Palette:
 class LayoutCanvas(Gtk.DrawingArea):
     __gtype_name__ = "HyprlayoutCanvas"
 
-    __gsignals__ = {
+    __gsignals__: ClassVar[dict] = {
         # a different monitor became the selection
         "selection-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         # geometry changed and is still being dragged
