@@ -64,9 +64,34 @@ def shell_config_path() -> Path:
     return config_home() / "omarchy" / "shell.json"
 
 
+#: Where a packaged build puts the QML, since it cannot live inside the Python
+#: package: `pip`/`makepkg` install the module tree into site-packages, and
+#: `plugin/` is a sibling of it in the checkout, not a child.
+INSTALLED_PLUGIN_DIRS = (
+    Path("/usr/share/displaywright/plugin"),
+    Path("/usr/local/share/displaywright/plugin"),
+)
+
+
 def source_dir() -> Path:
-    """The ``plugin/`` directory shipped alongside this package."""
-    return Path(__file__).resolve().parents[2] / "plugin"
+    """The ``plugin/`` directory this build ships.
+
+    A checkout keeps it beside the Python package; a distribution package has to
+    put it under ``share/`` instead. Both are searched, checkout first, so a
+    developer running from a clone never picks up a stale system copy. The
+    checkout path is returned unconditionally when nothing exists, so the error
+    a caller gets names the place it was expecting.
+    """
+    candidates = [
+        Path(__file__).resolve().parents[2] / "plugin",
+        *INSTALLED_PLUGIN_DIRS,
+    ]
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    candidates.append(data_home / "displaywright" / "plugin")
+    for candidate in candidates:
+        if (candidate / "manifest.json").is_file():
+            return candidate
+    return candidates[0]
 
 
 @dataclass(frozen=True)

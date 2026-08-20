@@ -1,0 +1,67 @@
+# Maintainer: bkblab.ai <y@bkblab.ai>
+
+pkgname=displaywright-git
+_pkgname=displaywright
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc="Display arrangement and per-display wallpapers for Hyprland and Omarchy"
+arch=('any')
+url="https://github.com/BlackKingBarOrg/displaywright"
+license=('MIT')
+# Hyprland is the compositor this talks to; GTK 4 and libadwaita are the window.
+depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'hyprland')
+# jq is only reached by the renderer's picker script, which runs inside
+# omarchy-shell rather than in this process.
+optdepends=(
+  'omarchy: the shell that hosts the wallpaper renderer'
+  'jq: pick a wallpaper by double-clicking a display'
+  'qt6-multimedia-ffmpeg: video wallpapers'
+  'ffmpeg: thumbnails for video wallpapers'
+)
+makedepends=('git' 'python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source=("$_pkgname::git+https://github.com/BlackKingBarOrg/displaywright.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  # Tagged releases become 0.1.0.r12.gabc1234; before the first tag, the
+  # version from pyproject keeps the string sortable rather than starting at 0.
+  if git describe --tags >/dev/null 2>&1; then
+    git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf "%s.r%s.g%s" \
+      "$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)" \
+      "$(git rev-list --count HEAD)" \
+      "$(git rev-parse --short HEAD)"
+  fi
+}
+
+build() {
+  cd "$srcdir/$_pkgname"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$srcdir/$_pkgname"
+  # The GTK suites skip themselves without a display, which is what a build
+  # chroot has; the logic layers still run.
+  python -m unittest discover -t . -s tests
+}
+
+package() {
+  cd "$srcdir/$_pkgname"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  # The QML renderer cannot live inside the Python package -- it is a sibling of
+  # it in the checkout -- so it goes under share/, where plugin.source_dir()
+  # looks second.
+  install -d "$pkgdir/usr/share/$_pkgname"
+  cp -r plugin "$pkgdir/usr/share/$_pkgname/plugin"
+
+  install -Dm644 "data/$_pkgname.desktop" \
+    "$pkgdir/usr/share/applications/$_pkgname.desktop"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

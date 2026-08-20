@@ -4,6 +4,7 @@ These tests are mostly about what installing must *not* touch.
 """
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -116,6 +117,39 @@ class Install(InstallBase):
         self.assertFalse(state.enabled)
         self.assertFalse(state.ready)
         self.assertIn("not enabled", state.describe())
+
+
+class SourceDirTests(unittest.TestCase):
+    """Finding the QML, in a checkout and in a distribution package.
+
+    A wheel puts the Python package under site-packages and leaves `plugin/`
+    behind, because it is a sibling of the package rather than a child. A
+    distribution has to put it under share/ instead, and the lookup has to find
+    it there or `renderer install` fails on every packaged install.
+    """
+
+    def test_a_checkout_is_found_beside_the_package(self):
+        # The real repository, which is what the developer is running from.
+        self.assertTrue((plugin.source_dir() / "manifest.json").is_file())
+        self.assertEqual(plugin.source_dir().name, "plugin")
+
+    def test_a_packaged_install_is_found_under_share(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            shipped = root / "displaywright" / "plugin"
+            shipped.mkdir(parents=True)
+            (shipped / "manifest.json").write_text("{}")
+            # No checkout beside the module, which is the packaged situation.
+            with mock.patch.object(plugin, "__file__", str(root / "site-packages"
+                                                           / "displaywright" / "wallpapers"
+                                                           / "plugin.py")), \
+                 mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(root)}):
+                self.assertEqual(plugin.source_dir(), shipped)
+
+    def test_the_checkout_wins_over_a_system_copy(self):
+        # A developer running from a clone must not pick up a stale install.
+        with mock.patch.dict(os.environ, {"XDG_DATA_HOME": "/nonexistent"}):
+            self.assertTrue(str(plugin.source_dir()).startswith(str(Path.cwd())))
 
 
 class Uninstall(InstallBase):
