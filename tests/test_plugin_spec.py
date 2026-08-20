@@ -126,6 +126,28 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(file=name):
                 self.assertTrue((self.source / name).is_file())
 
+    def test_double_click_reaches_a_picker_that_needs_nothing_else_installed(self):
+        # The entry point for someone who installed only the plugin. It has to
+        # be the renderer's own script, not a command from the app: on a fresh
+        # install no display is pinned and no window exists.
+        surface = (self.source / "Surface.qml").read_text()
+        self.assertIn("pick-wallpaper.sh", surface)
+        self.assertIn("onDoubleClicked", surface)
+        script = self.source / "pick-wallpaper.sh"
+        self.assertTrue(script.is_file())
+        self.assertTrue(script.stat().st_mode & 0o111, "picker script is not executable")
+        body = script.read_text()
+        # It drives Omarchy's own overlay rather than shipping a second picker.
+        self.assertIn("omarchy-shell image-selector open", body)
+        # A span outranks the per-display entries, so writing one under a span
+        # would look like the pick did nothing.
+        self.assertIn("del(.span)", body)
+
+    def test_the_readme_leads_with_the_double_click(self):
+        readme = (self.source / "README.md").read_text()
+        use = readme.split("## Use", 1)[1]
+        self.assertIn("Double-click", use.split("###", 1)[0])
+
     def test_the_readme_shows_how_to_use_the_plugin_on_its_own(self):
         # Installed from the marketplace this is the renderer and nothing else:
         # no window, no command on PATH. So the config file it reads is not an
@@ -143,14 +165,6 @@ class MarketplaceListing(unittest.TestCase):
         readme = (self.source / "README.md").read_text()
         self.assertIn("separate project", readme)
         self.assertIn("github.com/BlackKingBarOrg/displaywright", readme)
-
-    def test_double_clicking_the_desktop_cannot_fail_silently(self):
-        # Surface.qml offers to open the window on a double click. Launching a
-        # command that is not installed fails with no output at all, which
-        # reads as a dead desktop; the fallback has to say something.
-        surface = (self.source / "Surface.qml").read_text()
-        self.assertIn("command -v displaywright", surface)
-        self.assertIn("notify-send", surface)
 
     def test_the_readme_does_not_ask_anyone_to_disable_the_stock_renderer(self):
         # The renderer draws on top of omarchy.background now. An install
