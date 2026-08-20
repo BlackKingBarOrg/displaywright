@@ -1,6 +1,6 @@
 import unittest
 
-from hyprlayout.model import (
+from displaywright.model import (
     Mode,
     MonitorState,
     scale_warning,
@@ -96,11 +96,88 @@ class FromHyprctlTests(unittest.TestCase):
         self.assertEqual(self.laptop.pretty_name, "LG Display")
         self.assertEqual(self.ultrawide.pretty_name, "CSF CS3421")
 
-    def test_rotation_undone_when_reading_back(self):
-        rotated = dict(HYPRCTL_SAMPLE[1], transform=1, width=1440, height=3440)
+    def test_a_rotated_output_keeps_the_mode_hyprctl_reported(self):
+        # hyprctl reports the *mode*, not what the panel shows: a display turned
+        # on its side is still "3440x1440", and that is the string every entry
+        # in availableModes uses. Rotating it here would invent a mode the
+        # display does not have, and applying that mode would fail.
+        rotated = dict(HYPRCTL_SAMPLE[1], transform=1)
         state = MonitorState.from_hyprctl(rotated)
         self.assertEqual(state.mode, Mode(3440, 1440, 50.0))
+        self.assertIn(state.mode.resolution, [m.resolution for m in state.available_modes])
         self.assertEqual(state.logical_size, (1440.0, 3440.0))
+
+    def test_focus_is_read_back(self):
+        state = MonitorState.from_hyprctl(dict(HYPRCTL_SAMPLE[1], focused=True))
+        self.assertTrue(state.focused)
+        self.assertFalse(MonitorState.from_hyprctl(HYPRCTL_SAMPLE[1]).focused)
+
+
+class PanelGeometryTests(unittest.TestCase):
+    """What a wallpaper has to cover, which is not what a monitor rule says.
+
+    The wallpaper half of the app reads these; getting a rotation or a scale
+    wrong here draws the picture on its side or at the wrong size.
+    """
+
+    def entry(self, **over):
+        base = dict(HYPRCTL_SAMPLE[1], width=2560, height=1440, scale=1,
+                    availableModes=["2560x1440@60.00Hz"], refreshRate=60.0)
+        base.update(over)
+        return MonitorState.from_hyprctl(base)
+
+    def test_an_unscaled_landscape_display_is_itself(self):
+        state = self.entry()
+        self.assertEqual(state.pixel_size_rotated, (2560, 1440))
+        self.assertEqual(state.logical_size, (2560.0, 1440.0))
+        self.assertFalse(state.rotated)
+        self.assertFalse(state.portrait)
+
+    def test_scaling_shrinks_the_footprint_but_not_the_pixels(self):
+        state = self.entry(width=3200, height=2000, scale=2,
+                           availableModes=["3200x2000@60.00Hz"])
+        self.assertEqual(state.pixel_size_rotated, (3200, 2000))
+        self.assertEqual(state.logical_size, (1600.0, 1000.0))
+
+    def test_a_quarter_turn_swaps_width_and_height(self):
+        for transform in (1, 3, 5, 7):
+            with self.subTest(transform=transform):
+                state = self.entry(transform=transform)
+                self.assertEqual(state.pixel_size_rotated, (1440, 2560))
+                self.assertEqual(state.logical_size, (1440.0, 2560.0))
+                self.assertTrue(state.rotated)
+                self.assertTrue(state.portrait)
+
+    def test_a_half_turn_or_flip_does_not(self):
+        for transform in (0, 2, 4, 6):
+            with self.subTest(transform=transform):
+                state = self.entry(transform=transform)
+                self.assertEqual(state.pixel_size_rotated, (2560, 1440))
+                self.assertFalse(state.rotated)
+
+    def test_rotation_is_applied_before_the_scale(self):
+        state = self.entry(width=2880, height=1800, scale=1.5, transform=1,
+                           availableModes=["2880x1800@60.00Hz"])
+        self.assertEqual(state.pixel_size_rotated, (1800, 2880))
+        self.assertEqual(state.logical_size, (1200.0, 1920.0))
+
+    def test_a_zero_scale_is_treated_as_one(self):
+        self.assertEqual(self.entry(scale=0).logical_size, (2560.0, 1440.0))
+
+    def test_edges_follow_from_position_and_logical_size(self):
+        state = self.entry(x=1600, y=-826)
+        self.assertEqual((state.rect.right, state.rect.bottom), (1600 + 2560, -826 + 1440))
+
+    def test_an_unscaled_display_summarises_as_just_its_resolution(self):
+        self.assertEqual(self.entry().panel_summary(), "2560\u00d71440")
+
+    def test_a_scaled_display_says_what_the_desktop_makes_of_it(self):
+        state = self.entry(width=3200, height=2000, scale=2,
+                           availableModes=["3200x2000@60.00Hz"])
+        self.assertEqual(state.panel_summary(), "3200\u00d72000 \u00b7 scale 2 \u2192 1600\u00d71000")
+
+    def test_a_rotated_display_says_so(self):
+        self.assertEqual(self.entry(transform=1).panel_summary(), "1440\u00d72560 \u00b7 rotated")
 
 
 class RuleArgsTests(unittest.TestCase):

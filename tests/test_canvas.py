@@ -1,4 +1,4 @@
-"""Drag pipeline tests. Skipped when there is no display to initialise GTK on."""
+"""Arrangement drag pipeline. Skipped when there is no display to initialise GTK on."""
 
 import unittest
 
@@ -13,7 +13,7 @@ try:
 except (ImportError, ValueError):  # PyGObject or the GTK4 typelib is missing
     HAVE_GTK = False
 
-from hyprlayout.model import Mode, MonitorState
+from displaywright.model import Mode, MonitorState
 
 # Gtk.init_check() is not a display probe: it returns True even with no display
 # at all, and then constructing a widget segfaults. Gdk.Display.get_default() is
@@ -35,9 +35,9 @@ def monitor(name, w, h, x=0, y=0, scale=1.0):
 @unittest.skipUnless(HAVE_DISPLAY, "needs a Wayland or X11 display")
 class CanvasDragTests(unittest.TestCase):
     def setUp(self):
-        from hyprlayout.canvas import LayoutCanvas
+        from displaywright.displays.canvas import ArrangeCanvas
 
-        self.canvas = LayoutCanvas()
+        self.canvas = ArrangeCanvas()
         # eDP-1 is 1600x1000 logical, DP-1 sits flush to its right.
         self.canvas.set_states(
             [monitor("eDP-1", 3200, 2000, scale=2.0), monitor("DP-1", 3440, 1440, x=1600)]
@@ -47,11 +47,11 @@ class CanvasDragTests(unittest.TestCase):
 
     def _grab(self, state):
         """Start a drag from the centre of a monitor's tile."""
-        cx, cy = self.canvas._to_device(state.rect.cx, state.rect.cy)
+        cx, cy = self.canvas.to_device(state.rect.cx, state.rect.cy)
         self.canvas._on_drag_begin(None, cx, cy)
 
     def _move(self, dx_logical, dy_logical, finish=True):
-        zoom = self.canvas._zoom
+        zoom = self.canvas.zoom
         self.canvas._on_drag_update(None, dx_logical * zoom, dy_logical * zoom)
         if finish:
             self.canvas._on_drag_end(None, dx_logical * zoom, dy_logical * zoom)

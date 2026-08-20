@@ -47,3 +47,23 @@ jobs:
             python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
       - name: Run the suite on the system interpreter
         run: /usr/bin/python3 -m unittest discover -t . -s tests
+
+  qml:
+    # Syntax only. Type-checking the renderer needs Quickshell and Omarchy's
+    # shell modules, neither of which exists on a runner; `make lint` does the
+    # full check on a real Omarchy machine.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install qmllint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qt6-declarative-dev-tools
+      - name: Check every QML file parses
+        run: |
+          fail=0
+          for f in plugin/*.qml plugin/renderers/*.qml; do
+            out=$(/usr/lib/qt6/bin/qmllint --bare "$f" 2>&1 | grep -E '^Error' || true)
+            if [ -n "$out" ]; then echo "$f"; echo "$out"; fail=1; fi
+          done
+          exit $fail

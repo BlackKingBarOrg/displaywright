@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Displays & Wallpapers
+GenericName=Display Settings
+Comment=Arrange your displays and choose a wallpaper for each one
+Exec=displaywright
+Icon=video-display-symbolic
+Terminal=false
+Categories=Settings;HardwareSettings;DesktopSettings;GTK;
+Keywords=display;monitor;screen;layout;resolution;scale;wallpaper;background;omarchy;hyprland;
+StartupNotify=true
+StartupWMClass=ai.bkblab.displaywright

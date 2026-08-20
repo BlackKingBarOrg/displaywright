@@ -39,8 +39,8 @@ body:
   - type: textarea
     id: status
     attributes:
-      label: hyprlayout's view of the layout
-      description: Output of `hyprlayout --status`
+      label: displaywright's view of the layout
+      description: Output of `displaywright layout status`
       render: text
     validations:
       required: false
@@ -58,8 +58,17 @@ body:
     id: generated-config
     attributes:
       label: Generated config (if the report is about writing monitors.lua)
-      description: Output of `hyprlayout --diff`
+      description: Output of `displaywright layout diff`
       render: diff
+    validations:
+      required: false
+
+  - type: textarea
+    id: wallpaper
+    attributes:
+      label: Wallpapers (if the report is about what a display draws)
+      description: Output of `displaywright wallpaper status` and `displaywright renderer status`
+      render: text
     validations:
       required: false
 

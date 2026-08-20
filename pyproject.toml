@@ -3,13 +3,16 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hyprlayout"
+name = "displaywright"
 version = "0.1.0"
-description = "Drag-and-drop display arrangement for Hyprland"
+description = "Display arrangement and per-display wallpapers for Hyprland and Omarchy"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-keywords = ["hyprland", "wayland", "monitors", "display", "omarchy", "gtk4"]
+keywords = [
+  "hyprland", "wayland", "monitors", "display", "wallpaper", "omarchy",
+  "quickshell", "multi-monitor", "gtk4",
+]
 classifiers = [
   "Environment :: X11 Applications :: GTK",
   "Operating System :: POSIX :: Linux",
@@ -17,17 +20,18 @@ classifiers = [
   "Topic :: Desktop Environment :: Window Managers",
 ]
 # PyGObject, GTK4 and libadwaita are expected from the system packages
-# (python-gobject, gtk4, libadwaita) rather than pip.
+# (python-gobject gtk4 libadwaita) rather than pip. The wallpaper renderer
+# additionally needs quickshell, and video wallpapers need qt6-multimedia-ffmpeg.
 dependencies = []
 
 [project.scripts]
-hyprlayout = "hyprlayout.cli:main"
+displaywright = "displaywright.cli:main"
 
 [tool.setuptools]
-packages = ["hyprlayout"]
+packages = ["displaywright", "displaywright.displays", "displaywright.wallpapers"]
 
 [tool.setuptools.data-files]
-"share/applications" = ["data/hyprlayout.desktop"]
+"share/applications" = ["data/displaywright.desktop"]
 
 [tool.ruff]
 # GTK constructor calls and fully annotated signatures run past 100 without
@@ -44,8 +48,13 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # gi.require_version() has to run before anything imports from gi.repository.
-"hyprlayout/app.py" = ["E402"]
-"hyprlayout/canvas.py" = ["E402"]
-"hyprlayout/window.py" = ["E402"]
+"displaywright/canvas.py" = ["E402"]
+"displaywright/drawing.py" = ["E402"]
+"displaywright/app.py" = ["E402"]
+"displaywright/window.py" = ["E402"]
+"displaywright/displays/canvas.py" = ["E402"]
+"displaywright/displays/page.py" = ["E402"]
+"displaywright/wallpapers/canvas.py" = ["E402"]
+"displaywright/wallpapers/page.py" = ["E402"]
 "tests/test_canvas.py" = ["E402"]
-"tests/test_window.py" = ["E402"]
+"tests/test_displays_page.py" = ["E402"]

@@ -2,8 +2,8 @@ import json
 import unittest
 from unittest import mock
 
-from hyprlayout import hypr
-from hyprlayout.model import Mode, MonitorState
+from displaywright import hypr
+from displaywright.model import Mode, MonitorState
 
 MONITORS_JSON = json.dumps(
     [

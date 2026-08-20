@@ -1,0 +1,151 @@
+"""Installing edits shell.json, which also holds the user's whole bar layout.
+
+These tests are mostly about what installing must *not* touch.
+"""
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from displaywright.wallpapers import plugin
+
+OTHER_PLUGIN = {"id": "acme.weather", "city": "Oslo"}
+
+
+class InstallBase(unittest.TestCase):
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory()
+        self.config_home = Path(self._dir.name)
+        patcher = mock.patch.object(plugin, "config_home", return_value=self.config_home)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._dir.cleanup)
+        self.shell_json = self.config_home / "omarchy" / "shell.json"
+        self.shell_json.parent.mkdir(parents=True)
+        self.write_shell({
+            "version": 1,
+            "bar": {"layout": {"left": [{"id": "omarchy.menu"}]}},
+            "plugins": [OTHER_PLUGIN],
+        })
+
+    def write_shell(self, data):
+        self.shell_json.write_text(json.dumps(data))
+
+    def read_shell(self):
+        return json.loads(self.shell_json.read_text())
+
+
+class Install(InstallBase):
+    def test_nothing_is_installed_to_begin_with(self):
+        state = plugin.status()
+        self.assertFalse(state.installed)
+        self.assertFalse(state.ready)
+
+    def test_install_links_enables_and_displaces(self):
+        plugin.install(link=True)
+        state = plugin.status()
+        self.assertTrue(state.installed)
+        self.assertTrue(state.linked)
+        self.assertTrue(state.ready)
+
+        data = self.read_shell()
+        self.assertIn({"id": plugin.PLUGIN_ID}, data["plugins"])
+        self.assertIn(plugin.DISPLACED_PLUGIN, data["disabledPlugins"])
+
+    def test_install_copies_when_asked(self):
+        plugin.install(link=False)
+        target = plugin.install_dir()
+        self.assertFalse(target.is_symlink())
+        self.assertTrue((target / "Wallpaper.qml").is_file())
+        self.assertTrue((target / "renderers" / "ImageLayer.qml").is_file())
+
+    def test_installing_twice_changes_nothing_the_second_time(self):
+        plugin.install(link=True)
+        first = self.read_shell()
+        self.assertEqual(plugin.install(link=True), [])
+        self.assertEqual(self.read_shell(), first)
+
+    def test_the_rest_of_shell_json_is_left_alone(self):
+        plugin.install(link=True)
+        data = self.read_shell()
+        self.assertIn(OTHER_PLUGIN, data["plugins"])
+        self.assertEqual(data["bar"]["layout"]["left"], [{"id": "omarchy.menu"}])
+
+    def test_switching_from_a_link_to_a_copy_replaces_it(self):
+        plugin.install(link=True)
+        self.assertTrue(plugin.install_dir().is_symlink())
+        plugin.install(link=False)
+        self.assertFalse(plugin.install_dir().is_symlink())
+        self.assertTrue((plugin.install_dir() / "manifest.json").is_file())
+
+    def test_a_disabled_but_uninstalled_renderer_is_reported_as_such(self):
+        plugin.install(link=True)
+        data = self.read_shell()
+        data["plugins"] = [OTHER_PLUGIN]
+        self.write_shell(data)
+        state = plugin.status()
+        self.assertTrue(state.installed)
+        self.assertFalse(state.enabled)
+        self.assertFalse(state.ready)
+        self.assertIn("not enabled", state.describe())
+
+    def test_a_renderer_racing_the_builtin_is_reported_as_such(self):
+        plugin.install(link=True)
+        data = self.read_shell()
+        del data["disabledPlugins"]
+        self.write_shell(data)
+        self.assertIn("still enabled", plugin.status().describe())
+
+
+class Uninstall(InstallBase):
+    def test_uninstall_reverses_install_completely(self):
+        before = self.read_shell()
+        plugin.install(link=True)
+        plugin.uninstall()
+        self.assertEqual(self.read_shell(), before)
+        self.assertFalse(plugin.install_dir().exists())
+
+    def test_uninstall_keeps_other_disabled_plugins(self):
+        data = self.read_shell()
+        data["disabledPlugins"] = ["omarchy.weather"]
+        self.write_shell(data)
+        plugin.install(link=True)
+        plugin.uninstall()
+        self.assertEqual(self.read_shell()["disabledPlugins"], ["omarchy.weather"])
+
+    def test_uninstall_keeps_other_plugins(self):
+        plugin.install(link=True)
+        plugin.uninstall()
+        self.assertEqual(self.read_shell()["plugins"], [OTHER_PLUGIN])
+
+    def test_uninstalling_what_was_never_installed_is_a_no_op(self):
+        self.assertEqual(plugin.uninstall(), [])
+
+    def test_files_can_be_kept_while_the_takeover_is_undone(self):
+        plugin.install(link=True)
+        plugin.uninstall(remove_files=False)
+        self.assertTrue(plugin.install_dir().exists())
+        self.assertFalse(plugin.status().enabled)
+
+
+class Manifest(unittest.TestCase):
+    def test_the_shipped_manifest_satisfies_omarchy_s_validator(self):
+        data = json.loads((plugin.source_dir() / "manifest.json").read_text())
+        self.assertEqual(data["schemaVersion"], 1)
+        for field in ("id", "name", "version", "kinds", "entryPoints"):
+            self.assertIn(field, data)
+        self.assertEqual(data["id"], plugin.PLUGIN_ID)
+        self.assertIn("service", data["kinds"])
+        entry = data["entryPoints"]["service"]
+        # The registry rejects absolute paths and anything with "..".
+        self.assertFalse(entry.startswith("/"))
+        self.assertNotIn("..", entry)
+        self.assertTrue((plugin.source_dir() / entry).is_file())
+
+    def test_every_renderer_the_surface_dispatches_to_exists(self):
+        surface = (plugin.source_dir() / "Surface.qml").read_text()
+        for name in ("ColorLayer", "VideoLayer", "ImageLayer"):
+            self.assertIn(f"renderers/{name}.qml", surface)
+            self.assertTrue((plugin.source_dir() / "renderers" / f"{name}.qml").is_file())
