@@ -20,15 +20,14 @@ page is the same display on the other.
 
 ```bash
 omarchy plugin add https://github.com/BlackKingBarOrg/displaywright-shell-plugin.git --enable
-omarchy plugin disable omarchy.background
 ```
 
-**Both lines.** `omarchy plugin add` will not disable the built-in renderer for
-you, and two plugins drawing on `WlrLayer.Background` means the wallpaper you
-get is a coin flip per session. Theme switching keeps working — displaywright
-implements the whole `background` IPC target, palette transition included.
+Nothing changes yet. The renderer draws on top of Omarchy's own, taking over a
+display only once you give that display a picture — so the theme background, the
+SUPER + CTRL + SPACE switcher and the palette that follows your theme all keep
+working, and a display you never touch is never touched.
 
-That is the wallpaper renderer, and it is driven by
+It is driven by
 `~/.config/displaywright/wallpapers.json` — the format is in
 [`plugin/README.md`](plugin/README.md).
 
@@ -46,8 +45,7 @@ make install
 
 Then run `displaywright`, or search **Displaywright** in the app menu
 (SUPER + ALT + SPACE). It writes the same file the renderer reads, and
-`make plugin` installs the renderer for you if you skipped the two commands
-above.
+`make plugin` installs the renderer for you if you skipped the command above.
 
 Coming from **wallwright** or **hyprlayout**, which this merges: `displaywright
 migrate` moves your wallpapers, profiles and renderer across. It never
@@ -83,8 +81,8 @@ hyprlang `keyword` on older builds.
   scaled display, where most tools get Center and Tile wrong.
 - **A preview that is not a guess.** It runs the same arithmetic the renderer
   does, so you see what Center will do before committing.
-- **Displays you have not touched** keep following the Omarchy theme background,
-  so a fresh install looks like stock Omarchy.
+- **Displays you have not touched** are left to Omarchy's own renderer, so a
+  fresh install looks and behaves exactly like stock Omarchy.
 - **One folder.** Everything you pick is copied into `~/Pictures/Displaywright`,
   so a wallpaper survives you emptying `~/Downloads`.
 - Flat colours and video as well as pictures. No Apply button here — a wallpaper

@@ -15,7 +15,8 @@ cd displaywright
 You need Python 3.11+ and PyGObject with GTK 4 and libadwaita
 (`python-gobject gtk4 libadwaita` on Arch). To see a wallpaper on screen you
 also need the renderer installed — `make plugin`, and `make unplugin` to undo
-it.
+it. It draws on top of `omarchy.background` rather than replacing it, so
+installing it is reversible and changes nothing until a display is pinned.
 
 ## The three halves
 

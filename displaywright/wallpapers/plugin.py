@@ -1,14 +1,17 @@
 """Installing the renderer into omarchy-shell, and taking it back out.
 
-Two things have to be true for displaywright to draw anything:
+One thing has to be true for displaywright to draw anything: its plugin
+directory exists under ``~/.config/omarchy/plugins/`` and is listed in
+``plugins[]`` in ``shell.json``. That is the whole install.
 
-* its plugin directory exists under ``~/.config/omarchy/plugins/`` and is
-  listed in ``plugins[]`` in ``shell.json``; and
-* ``omarchy.background`` is listed in ``disabledPlugins[]``.
-
-The second one is not optional. Both plugins put an opaque surface on
-``WlrLayer.Background`` with no defined order between them, so leaving the
-built-in enabled means the wallpaper you see is a coin flip per session.
+Earlier versions also disabled ``omarchy.background``, on the grounds that two
+opaque surfaces on ``WlrLayer.Background`` have no defined order between them.
+The renderer no longer draws anything on an output it has not been given a
+wallpaper for, so there is nothing to fight over: the stock renderer stays on
+and keeps the theme background, the switcher and the palette transition. An
+install left over from that era is repaired here -- :func:`install` switches
+``omarchy.background`` back on -- because leaving it off now would mean an
+output with no wallpaper of ours draws nothing at all.
 
 shell.json is edited directly rather than over IPC so that installing works
 with the shell stopped, and it is edited *minimally* -- the file also holds the
@@ -26,7 +29,10 @@ from pathlib import Path
 from ..paths import config_dir, config_home, temp_sibling
 
 PLUGIN_ID = "ai.bkblab.displaywright"
-DISPLACED_PLUGIN = "omarchy.background"
+
+#: The stock renderer. displaywright draws on top of it and must never turn it
+#: off; the name is here so an install that once did can be undone.
+STOCK_PLUGIN = "omarchy.background"
 
 #: wallwright's plugin id. It draws the same layer from the same checkout, so
 #: leaving it installed alongside the current one means two surfaces fighting
@@ -68,13 +74,16 @@ class Status:
     installed: bool
     linked: bool
     enabled: bool
-    displaced: bool
+    #: True when something has switched the stock renderer off. Not fatal for
+    #: us -- our own wallpapers still draw -- but every output we have no
+    #: opinion about is left blank, which is not what anybody wants.
+    stock_off: bool = False
     #: A wallwright install is still in place and would fight for the layer.
     legacy: bool = False
 
     @property
     def ready(self) -> bool:
-        return self.installed and self.enabled and self.displaced and not self.legacy
+        return self.installed and self.enabled and not self.stock_off and not self.legacy
 
     def describe(self) -> str:
         if self.ready:
@@ -85,8 +94,11 @@ class Status:
         problems = []
         if not self.enabled:
             problems.append(f"not enabled in {shell_config_path()}")
-        if not self.displaced:
-            problems.append(f"{DISPLACED_PLUGIN} is still enabled and will fight for the layer")
+        if self.stock_off:
+            problems.append(
+                f"{STOCK_PLUGIN} is switched off, so displays without a wallpaper of "
+                "their own draw nothing"
+            )
         if self.legacy:
             problems.append(f"{LEGACY_PLUGIN_ID} is still installed and draws the same layer")
         return "installed but inactive — " + "; ".join(problems)
@@ -154,9 +166,22 @@ def _remove_tree(target: Path) -> bool:
     return False
 
 
-def _is_displaced(data: dict) -> bool:
+def _is_disabled(data: dict, plugin_id: str) -> bool:
     disabled = data.get("disabledPlugins")
-    return isinstance(disabled, list) and DISPLACED_PLUGIN in disabled
+    return isinstance(disabled, list) and plugin_id in disabled
+
+
+def _undisable(data: dict, plugin_id: str) -> bool:
+    """Take a plugin out of ``disabledPlugins[]``. True if it was there."""
+    disabled = data.get("disabledPlugins")
+    if not isinstance(disabled, list) or plugin_id not in disabled:
+        return False
+    remaining = [entry for entry in disabled if entry != plugin_id]
+    if remaining:
+        data["disabledPlugins"] = remaining
+    else:
+        data.pop("disabledPlugins", None)
+    return True
 
 
 def status() -> Status:
@@ -167,7 +192,7 @@ def status() -> Status:
         installed=(target / "manifest.json").is_file(),
         linked=target.is_symlink(),
         enabled=_is_enabled(data),
-        displaced=_is_displaced(data),
+        stock_off=_is_disabled(data, STOCK_PLUGIN),
         legacy=legacy_target.exists() or _is_enabled(data, LEGACY_PLUGIN_ID),
     )
 
@@ -210,15 +235,11 @@ def install(link: bool = True) -> list[str]:
         changed.append(f"enabled {PLUGIN_ID}")
         dirty = True
 
-    if not _is_displaced(data):
-        disabled = data.get("disabledPlugins")
-        if not isinstance(disabled, list):
-            disabled = []
-        disabled.append(DISPLACED_PLUGIN)
-        data["disabledPlugins"] = disabled
-        changed.append(
-            f"disabled {DISPLACED_PLUGIN} (displaywright takes over the background layer)"
-        )
+    # An install from before the renderer learned to share the layer will have
+    # switched the stock one off. Put it back: we draw over it now, and without
+    # it an output we have no wallpaper for shows nothing at all.
+    if _undisable(data, STOCK_PLUGIN):
+        changed.append(f"re-enabled {STOCK_PLUGIN} (displaywright now draws on top of it)")
         dirty = True
 
     # wallwright drew the same layer from the same files. Two surfaces on one
@@ -246,14 +267,8 @@ def uninstall(remove_files: bool = True) -> list[str]:
             changed.append(f"disabled {plugin_id}")
             dirty = True
 
-    disabled = data.get("disabledPlugins")
-    if isinstance(disabled, list) and DISPLACED_PLUGIN in disabled:
-        remaining = [e for e in disabled if e != DISPLACED_PLUGIN]
-        if remaining:
-            data["disabledPlugins"] = remaining
-        else:
-            data.pop("disabledPlugins", None)
-        changed.append(f"re-enabled {DISPLACED_PLUGIN}")
+    if _undisable(data, STOCK_PLUGIN):
+        changed.append(f"re-enabled {STOCK_PLUGIN}")
         dirty = True
 
     if dirty:

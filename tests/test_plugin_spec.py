@@ -152,12 +152,12 @@ class MarketplaceListing(unittest.TestCase):
         self.assertIn("command -v displaywright", surface)
         self.assertIn("notify-send", surface)
 
-    def test_the_readme_warns_about_the_background_layer(self):
-        # Adding the plugin does not disable omarchy.background, so somebody
-        # arriving from the marketplace has to be told to do it themselves.
+    def test_the_readme_does_not_ask_anyone_to_disable_the_stock_renderer(self):
+        # The renderer draws on top of omarchy.background now. An install
+        # instruction that still switches it off would blank every display the
+        # user has not given a wallpaper to.
         readme = (self.source / "README.md").read_text()
-        self.assertIn(plugin.DISPLACED_PLUGIN, readme)
-        self.assertIn(f"omarchy plugin disable {plugin.DISPLACED_PLUGIN}", readme)
+        self.assertNotIn(f"omarchy plugin disable {plugin.STOCK_PLUGIN}", readme)
 
 
 @unittest.skipUnless(shutil.which("omarchy-plugin-validate"),

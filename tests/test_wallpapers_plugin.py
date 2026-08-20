@@ -43,7 +43,7 @@ class Install(InstallBase):
         self.assertFalse(state.installed)
         self.assertFalse(state.ready)
 
-    def test_install_links_enables_and_displaces(self):
+    def test_install_links_and_enables_without_touching_the_stock_renderer(self):
         plugin.install(link=True)
         state = plugin.status()
         self.assertTrue(state.installed)
@@ -52,7 +52,33 @@ class Install(InstallBase):
 
         data = self.read_shell()
         self.assertIn({"id": plugin.PLUGIN_ID}, data["plugins"])
-        self.assertIn(plugin.DISPLACED_PLUGIN, data["disabledPlugins"])
+        # The renderer draws on top of omarchy.background rather than in place
+        # of it, so installing must leave it alone. Switching it off would blank
+        # every display this plugin has no wallpaper for.
+        self.assertNotIn(plugin.STOCK_PLUGIN, data.get("disabledPlugins", []))
+
+    def test_install_repairs_an_install_that_switched_the_stock_renderer_off(self):
+        # Every displaywright before this one disabled omarchy.background, and
+        # so did wallwright. Upgrading has to undo that.
+        self.write_shell({
+            "version": 1,
+            "plugins": [OTHER_PLUGIN],
+            "disabledPlugins": [plugin.STOCK_PLUGIN],
+        })
+        changed = plugin.install(link=True)
+        self.assertNotIn(plugin.STOCK_PLUGIN, self.read_shell().get("disabledPlugins", []))
+        self.assertTrue(any(plugin.STOCK_PLUGIN in line for line in changed))
+        self.assertTrue(plugin.status().ready)
+
+    def test_a_stock_renderer_left_switched_off_is_reported(self):
+        plugin.install(link=True)
+        data = self.read_shell()
+        data["disabledPlugins"] = [plugin.STOCK_PLUGIN]
+        self.write_shell(data)
+        state = plugin.status()
+        self.assertTrue(state.stock_off)
+        self.assertFalse(state.ready)
+        self.assertIn("draw nothing", state.describe())
 
     def test_install_copies_when_asked(self):
         plugin.install(link=False)
@@ -90,13 +116,6 @@ class Install(InstallBase):
         self.assertFalse(state.enabled)
         self.assertFalse(state.ready)
         self.assertIn("not enabled", state.describe())
-
-    def test_a_renderer_racing_the_builtin_is_reported_as_such(self):
-        plugin.install(link=True)
-        data = self.read_shell()
-        del data["disabledPlugins"]
-        self.write_shell(data)
-        self.assertIn("still enabled", plugin.status().describe())
 
 
 class Uninstall(InstallBase):
