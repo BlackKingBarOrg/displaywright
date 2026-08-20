@@ -11,12 +11,19 @@ try:
     import gi
 
     gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
     gi.require_version("Adw", "1")
-    from gi.repository import Adw, Gtk  # noqa: F401
+    from gi.repository import Adw, Gdk, Gtk  # noqa: F401
 
     HAVE_GTK = True
 except (ImportError, ValueError):
     HAVE_GTK = False
+
+# Gtk.init_check() is not a display probe: it returns True even with no display
+# at all, and then constructing *any* widget -- a bare Gtk.DrawingArea will do
+# it -- takes the interpreter down with SIGSEGV rather than an exception.
+# Gdk.Display.get_default() is the honest signal.
+HAVE_DISPLAY = HAVE_GTK and Gtk.init_check() and Gdk.Display.get_default() is not None
 
 GUI_MODULES = (
     "displaywright.drawing",
@@ -55,20 +62,29 @@ class GuiImports(unittest.TestCase):
         manifest = Path(__file__).resolve().parent.parent / "plugin" / "manifest.json"
         self.assertEqual(json.loads(manifest.read_text())["id"], plugin.PLUGIN_ID)
 
-    def test_both_canvases_can_be_constructed_without_a_display(self):
-        # Constructing a widget needs no display; realising one does. This
-        # catches signal and property mistakes that only surface at class
-        # registration time -- and there are two canvases sharing one base now,
-        # so both registrations have to hold.
+    @unittest.skipUnless(HAVE_DISPLAY, "needs a Wayland or X11 display")
+    def test_both_canvases_survive_an_empty_state(self):
+        """Two canvases share one base; neither may trip over having no outputs.
+
+        This needs a display. GTK 4 segfaults on the first widget it builds
+        without one, so a suite that constructs widgets to prove they *can* be
+        constructed headlessly proves nothing and crashes the runner -- which
+        is exactly what it did. Signal and property mistakes surface at class
+        registration time, which happens on import, so
+        test_every_gui_module_imports already covers that ground with no
+        display at all.
+        """
         from displaywright.displays.canvas import ArrangeCanvas
         from displaywright.wallpapers.canvas import WallpaperCanvas
         from displaywright.wallpapers.model import Config
 
         arrange = ArrangeCanvas()
         arrange.set_states([])
+        self.assertIsNone(arrange.selected)
 
         wallpapers = WallpaperCanvas()
         wallpapers.set_config([], Config(), None)
+        self.assertIsNone(wallpapers.selected)
 
 
 if __name__ == "__main__":
