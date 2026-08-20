@@ -18,34 +18,36 @@ page is the same display on the other.
 
 ## Install
 
-No build step — it runs from a checkout:
-
-```bash
-git clone https://github.com/BlackKingBarOrg/displaywright
-cd displaywright
-./bin/displaywright
-```
-
-Or put it on your `PATH` and in your app launcher:
-
-```bash
-make install     # bin/displaywright into ~/.local/bin, plus the .desktop file
-make plugin      # the wallpaper renderer, into omarchy-shell
-make uninstall
-```
-
-> **`make plugin` changes who owns your desktop background.** It disables
-> `omarchy.background`, because two plugins drawing on `WlrLayer.Background`
-> means the wallpaper you get is a coin flip per session. Theme switching keeps
-> working — displaywright implements the whole `background` IPC target. Undo it
-> with `make unplugin`.
-
-Just want the wallpaper renderer, without the window?
-
 ```bash
 omarchy plugin add https://github.com/BlackKingBarOrg/displaywright-shell-plugin.git --enable
 omarchy plugin disable omarchy.background
 ```
+
+**Both lines.** `omarchy plugin add` will not disable the built-in renderer for
+you, and two plugins drawing on `WlrLayer.Background` means the wallpaper you
+get is a coin flip per session. Theme switching keeps working — displaywright
+implements the whole `background` IPC target, palette transition included.
+
+That is the wallpaper renderer, and it is driven by
+`~/.config/displaywright/wallpapers.json` — the format is in
+[`plugin/README.md`](plugin/README.md).
+
+### The window
+
+Picture library, a live preview of every fit, and the display arrangement
+editor. Nothing is compiled; `make install` symlinks `displaywright` onto your
+`PATH` and adds the launcher entry:
+
+```bash
+git clone https://github.com/BlackKingBarOrg/displaywright
+cd displaywright
+make install
+```
+
+Then run `displaywright`, or search **Displaywright** in the app menu
+(SUPER + ALT + SPACE). It writes the same file the renderer reads, and
+`make plugin` installs the renderer for you if you skipped the two commands
+above.
 
 Coming from **wallwright** or **hyprlayout**, which this merges: `displaywright
 migrate` moves your wallpapers, profiles and renderer across. It never
