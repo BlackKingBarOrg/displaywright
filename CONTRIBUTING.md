@@ -40,6 +40,41 @@ the shape of that file has to change both sides, and
 that module, and the claim that the preview matches the screen only holds if it
 agrees with `plugin/renderers/ImageLayer.qml`.
 
+## Project layout
+
+```
+displaywright/
+├── bin/displaywright         # run from a checkout, no install needed
+├── displaywright/
+│   ├── model.py              # Mode / MonitorState / Rect: geometry, hyprctl parsing, Lua rendering
+│   ├── hypr.py               # hyprctl calls, dialect fallbacks, socket2 event listener
+│   ├── paths.py              # XDG roots and atomic-write helpers
+│   ├── session.py            # the shared state both pages read
+│   ├── canvas.py             # the desk drawn small: view maths, hit testing, selection
+│   ├── drawing.py            # cairo helpers both canvases use
+│   ├── window.py             # one window, two pages
+│   ├── app.py  cli.py  migrate.py
+│   ├── displays/             # snapping, luawriter, omarchy, profiles,
+│   │                         # the draggable canvas, the arrangement page
+│   └── wallpapers/           # model, store, preview, span, library, plugin,
+│                             # shell, the preview canvas, the wallpaper page
+├── plugin/                   # the QML renderer, published as a repo of its own
+└── tests/                    # stdlib unittest only
+```
+
+## Runtime dialects
+
+Hyprland 0.56's Lua config changed the runtime interface, and `hyprctl` exits 0
+even when it refuses a request — a Lua-configured Hyprland answers `keyword
+can't work with non-legacy parsers` — so acceptance has to be read off the reply
+text. `hypr.py` tries the modern form first and falls back:
+
+| Operation | Lua config (0.56+) | Older hyprlang |
+| --- | --- | --- |
+| Apply a layout | `hyprctl eval 'hl.monitor({…})'` | `hyprctl --batch 'keyword monitor …'` |
+| Locate a display | `dispatch 'hl.dsp.focus{monitor="DP-1"}'` | `dispatch focusmonitor DP-1` |
+| Move the pointer | `dispatch 'hl.dsp.cursor.move{x=…, y=…}'` | `dispatch movecursor x y` |
+
 ## Tests
 
 ```bash
@@ -96,6 +131,28 @@ carefully before changing, in particular the comment about assignment order in
 The renderer is installed as a symlink to your checkout, and Omarchy's plugin
 watcher does not follow symlinks, so QML edits do not hot-reload. Run
 `omarchy-restart-shell` to pick them up.
+
+## Publishing the renderer
+
+`omarchy plugin add <url>` clones a repository straight into
+`~/.config/omarchy/plugins/<id>/`, so `manifest.json` has to sit at a repository
+root. Ours is in `plugin/`, deliberately next to the `preview.py` whose
+arithmetic it has to stay in step with — two hand-maintained repositories is how
+a preview starts lying about what the screen will do. The subtree is split out
+on publish instead:
+
+```bash
+make publish-plugin      # validate, test, git subtree split --prefix=plugin, push
+```
+
+The result, [displaywright-shell-plugin][mirror], is a **generated mirror**.
+Never commit to it directly; the next publish force-pushes over it.
+
+To list it on [omarchyplugins.com](https://omarchyplugins.com), open their issue
+form with the mirror's link, a category and tags. Their automated check
+validates the current commit before a maintainer approves the listing.
+
+[mirror]: https://github.com/BlackKingBarOrg/displaywright-shell-plugin
 
 ## Reporting a bug
 
