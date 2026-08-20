@@ -126,13 +126,22 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(file=name):
                 self.assertTrue((self.source / name).is_file())
 
-    def test_the_readme_says_where_the_window_is(self):
-        # The plugin is the renderer and nothing else: installed on its own it
-        # has no window and puts no command on PATH. Someone arriving from the
-        # marketplace has to be told that, or the only way to choose a
-        # wallpaper is hand-editing JSON they were never shown.
+    def test_the_readme_shows_how_to_use_the_plugin_on_its_own(self):
+        # Installed from the marketplace this is the renderer and nothing else:
+        # no window, no command on PATH. So the config file it reads is not an
+        # appendix, it is the only way anyone can use what they just installed.
         readme = (self.source / "README.md").read_text()
-        self.assertIn("renderer only", readme)
+        self.assertIn("wallpapers.json", readme)
+        self.assertIn('"monitors"', readme)
+        for fit in ("fill", "fit", "stretch", "tile", "center"):
+            with self.subTest(fit=fit):
+                self.assertIn(f"`{fit}`", readme)
+
+    def test_the_readme_points_at_the_window(self):
+        # Editing JSON is the floor, not the intended experience. Someone who
+        # would rather click has to be able to find out that a window exists.
+        readme = (self.source / "README.md").read_text()
+        self.assertIn("separate project", readme)
         self.assertIn("github.com/BlackKingBarOrg/displaywright", readme)
 
     def test_double_clicking_the_desktop_cannot_fail_silently(self):
