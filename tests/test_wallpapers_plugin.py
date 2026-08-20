@@ -131,19 +131,6 @@ class Uninstall(InstallBase):
 
 
 class Manifest(unittest.TestCase):
-    def test_the_shipped_manifest_satisfies_omarchy_s_validator(self):
-        data = json.loads((plugin.source_dir() / "manifest.json").read_text())
-        self.assertEqual(data["schemaVersion"], 1)
-        for field in ("id", "name", "version", "kinds", "entryPoints"):
-            self.assertIn(field, data)
-        self.assertEqual(data["id"], plugin.PLUGIN_ID)
-        self.assertIn("service", data["kinds"])
-        entry = data["entryPoints"]["service"]
-        # The registry rejects absolute paths and anything with "..".
-        self.assertFalse(entry.startswith("/"))
-        self.assertNotIn("..", entry)
-        self.assertTrue((plugin.source_dir() / entry).is_file())
-
     def test_every_renderer_the_surface_dispatches_to_exists(self):
         surface = (plugin.source_dir() / "Surface.qml").read_text()
         for name in ("ColorLayer", "VideoLayer", "ImageLayer"):

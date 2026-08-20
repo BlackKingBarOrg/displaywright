@@ -176,7 +176,7 @@ class MainWindow(Adw.ApplicationWindow):
             application_name="displaywright",
             application_icon="video-display-symbolic",
             version=__version__,
-            developer_name="bkblab",
+            developer_name="bkblab.ai",
             comments=(
                 "Display arrangement and per-display wallpapers for Hyprland "
                 "and Omarchy.\n\n"

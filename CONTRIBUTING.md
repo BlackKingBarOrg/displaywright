@@ -49,7 +49,7 @@ make lint          # bytecode + type-checked QML
 
 | Suite | Needs | Notes |
 |---|---|---|
-| `test_model`, `test_hypr`, `test_displays_*` (logic), `test_wallpapers_*` (logic), `test_migrate` | nothing | pure logic and mocked `hyprctl`; must stay importable without PyGObject |
+| `test_model`, `test_hypr`, `test_displays_*` (logic), `test_wallpapers_*` (logic), `test_migrate`, `test_plugin_spec` | nothing | pure logic and mocked `hyprctl`; must stay importable without PyGObject |
 | `test_gui_imports` | PyGObject | skips itself when GTK is missing |
 | `test_canvas` | a display | drives the real drag gesture pipeline |
 | `test_displays_page` | a display **and** a running Hyprland | read-only against the live compositor |
@@ -71,6 +71,19 @@ patterns to copy.
 
 The one exception is `test_hypr.test_identity_apply_is_accepted_and_changes_nothing`,
 which applies the layout that is *already* live and asserts nothing changed.
+
+## Working on the renderer's manifest
+
+`tests/test_plugin_spec.py` mirrors Omarchy's plugin contract by hand — the
+rules in `shell/services/PluginRegistry.qml` and `bin/omarchy-plugin-validate`.
+It does that so a manifest a user's shell would reject fails on a runner with
+no Omarchy installed. When Omarchy *is* installed the same suite also shells
+out to the real `omarchy-plugin-validate`, and `make validate-plugin` runs it
+directly. If Omarchy changes the contract, that test file is what has to change
+with it.
+
+`plugin/` is published as a repository root of its own (`make publish-plugin`),
+so its `README.md` and `LICENSE` are part of the deliverable, not decoration.
 
 ## Working on the renderer
 

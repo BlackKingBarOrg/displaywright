@@ -186,6 +186,10 @@ make uninstall
 `make plugin` is a separate step because it changes which plugin owns the
 desktop background. It is reversible with `make unplugin`.
 
+If you only want the wallpaper renderer and not the window, the plugin is also
+published on its own for `omarchy plugin add` — see
+[Just the renderer](#just-the-renderer).
+
 Bind it to a key in `~/.config/hypr/bindings.lua`:
 
 ```lua
@@ -213,6 +217,26 @@ Until you run it, an existing `~/.config/wallwright/config.json` is still read,
 so nothing disappears in the meantime. A `monitors.lua` carrying hyprlayout's
 managed block is recognised and rewritten in place rather than gaining a second
 block underneath.
+
+### Just the renderer
+
+The wallpaper half is an ordinary Omarchy shell plugin, published on its own so
+that `manifest.json` sits at a repository root — which is what
+`omarchy plugin add` requires:
+
+```bash
+omarchy plugin add https://github.com/BlackKingBarOrg/displaywright-shell-plugin.git --enable
+omarchy plugin disable omarchy.background
+```
+
+That second line is not optional and `omarchy plugin add` will not do it for
+you; see below for why. You then configure it by hand in
+`~/.config/displaywright/wallpapers.json`, since the picker lives in the window.
+`make plugin` (or `displaywright renderer install`) does both steps at once from
+this checkout, which is the easier path if you want the window anyway.
+
+That repository is generated from `plugin/` here by `make publish-plugin`, so
+issues and pull requests belong on this repo.
 
 ### What installing the renderer changes
 
@@ -478,16 +502,22 @@ displaywright/
 │       ├── canvas.py         # the arrangement, with the wallpapers on it
 │       └── page.py           # canvas, fit controls, picture library
 ├── plugin/                   # the QML renderer, running inside omarchy-shell
-└── tests/                    # 278 tests, stdlib unittest only
+│   ├── manifest.json         # the Omarchy plugin contract, schemaVersion 1
+│   ├── Wallpaper.qml         # entry point: one surface per output, config watching
+│   ├── Surface.qml           # one output's surface, transitions, IPC
+│   ├── renderers/            # one file per source kind: image, color, video
+│   └── README.md, LICENSE, preview.png   # published as a repo root of its own
+└── tests/                    # 290 tests, stdlib unittest only
 ```
 
 ## Tests
 
 ```bash
-make test    # python3 -m unittest discover -t . -s tests
-make lint    # bytecode-compiles the Python, type-checks the QML against
-             # Quickshell's and Omarchy's real modules
-make run     # the window, straight from the checkout
+make test             # python3 -m unittest discover -t . -s tests
+make lint             # bytecode-compiles the Python, type-checks the QML against
+                      # Quickshell's and Omarchy's real modules
+make validate-plugin  # runs Omarchy's own omarchy-plugin-validate on plugin/
+make run              # the window, straight from the checkout
 ```
 
 - The logic layers (geometry, snapping, Lua writing, profiles, fits, spans,
@@ -498,6 +528,10 @@ make run     # the window, straight from the checkout
   monitors` to check the dirty/Apply logic, the validation banner and the
   sidebar wiring. It is read-only: it never applies a layout, and every XDG root
   is redirected into a temporary directory first.
+- `test_plugin_spec.py` re-implements Omarchy's plugin contract — the manifest
+  rules from `PluginRegistry.qml` and `omarchy-plugin-validate` — so a manifest
+  that a user's shell would reject fails here first, on a runner with no
+  Omarchy on it. When Omarchy *is* present it also runs the real validator.
 - Without PyGObject installed, the GTK suites skip instead of failing, so the
   core tests still run anywhere.
 
@@ -512,6 +546,27 @@ make run     # the window, straight from the checkout
 - The renderer is installed as a symlink to your checkout, and Omarchy's plugin
   watcher does not follow symlinks, so QML edits do not hot-reload. Run
   `omarchy-restart-shell` to pick them up.
+
+## Publishing the renderer
+
+`omarchy plugin add <url>` clones a repository straight into
+`~/.config/omarchy/plugins/<id>/`, so `manifest.json` has to sit at a repository
+root. Ours lives in `plugin/`, next to the `preview.py` whose arithmetic it has
+to stay in step with — splitting them into two hand-maintained repositories is
+how a preview starts lying about what the screen will do. So the subtree is
+split out on publish instead:
+
+```bash
+make publish-plugin      # validate, test, git subtree split --prefix=plugin, push
+```
+
+The result is a **generated mirror**. Never commit to it directly; the next
+publish force-pushes over it.
+
+To list it on [omarchyplugins.com](https://omarchyplugins.com), the community
+directory, open their issue form with the plugin repository's link, a category
+and tags. Their automated check validates the current commit before a
+maintainer approves the listing.
 
 ## Contributing
 

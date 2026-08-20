@@ -153,6 +153,9 @@ make uninstall
 
 `make plugin` 单独一步，是因为它会改变由哪个插件占据桌面背景层。可以用 `make unplugin` 撤销。
 
+如果你只想要壁纸渲染器、不要窗口，插件也单独发布了一份供 `omarchy plugin add` 使用 ——
+见[只装渲染器](#只装渲染器)。
+
 绑到 Hyprland 快捷键（`~/.config/hypr/bindings.lua`）：
 
 ```lua
@@ -177,6 +180,22 @@ displaywright migrate
 在你执行它之前，旧的 `~/.config/wallwright/config.json` 仍然会被读取，所以中间不会突然
 少东西。`monitors.lua` 里 hyprlayout 留下的 managed block 也能被识别并原地改写，不会在
 下面再多出一块。
+
+### 只装渲染器
+
+壁纸这一半就是一个标准的 Omarchy shell 插件，单独发布了一个仓库，好让 `manifest.json`
+待在仓库根目录 —— 这是 `omarchy plugin add` 的硬要求：
+
+```bash
+omarchy plugin add https://github.com/BlackKingBarOrg/displaywright-shell-plugin.git --enable
+omarchy plugin disable omarchy.background
+```
+
+第二行不是可选的，而且 `omarchy plugin add` **不会**替你做（原因见下）。之后要手改
+`~/.config/displaywright/wallpapers.json`，因为图片选择器在窗口里。想连窗口一起要的话，
+`make plugin`（或 `displaywright renderer install`）会一次把两步都做掉，更省事。
+
+那个仓库是用 `make publish-plugin` 从这里的 `plugin/` 生成的，所以 issue 和 PR 请提到本仓库。
 
 ### 安装渲染器到底改了什么
 
@@ -412,15 +431,21 @@ displaywright/
 │       ├── canvas.py         # 带壁纸的排布画布
 │       └── page.py           # 画布、填充控件、图片库
 ├── plugin/                   # QML 渲染器，跑在 omarchy-shell 里
-└── tests/                    # 278 个测试，只用标准库 unittest
+│   ├── manifest.json         # Omarchy 插件契约，schemaVersion 1
+│   ├── Wallpaper.qml         # 入口：每块屏一个 surface，监听配置文件
+│   ├── Surface.qml           # 单块屏的 surface、过渡动画、IPC
+│   ├── renderers/            # 每种 source kind 一个文件：image / color / video
+│   └── README.md、LICENSE、preview.png   # 它自己作为仓库根发布时要用
+└── tests/                    # 290 个测试，只用标准库 unittest
 ```
 
 ## 测试
 
 ```bash
-make test    # python3 -m unittest discover -t . -s tests
-make lint    # 编译 Python 字节码，并用 Quickshell 和 Omarchy 的真实模块对 QML 做类型检查
-make run     # 从仓库直接运行窗口
+make test             # python3 -m unittest discover -t . -s tests
+make lint             # 编译 Python 字节码，并用 Quickshell 和 Omarchy 的真实模块对 QML 做类型检查
+make validate-plugin  # 用 Omarchy 自带的 omarchy-plugin-validate 校验 plugin/
+make run              # 从仓库直接运行窗口
 ```
 
 - 纯逻辑层（几何、吸附、Lua 生成、profile、填充、跨屏、插件安装、迁移）不需要显示器
@@ -430,6 +455,10 @@ make run     # 从仓库直接运行窗口
 - `test_displays_page.py` 用真实的 `hyprctl monitors` 把整个窗口搭起来，验证
   「有改动才允许 Apply」、校验横幅、侧栏联动等。它**只读**：不会应用布局，而且所有
   XDG 目录都先被重定向到临时目录。
+- `test_plugin_spec.py` 把 Omarchy 的插件契约（`PluginRegistry.qml` 和
+  `omarchy-plugin-validate` 里的 manifest 规则）重新实现了一遍，所以一份会被用户 shell
+  拒绝的 manifest 会先在测试里挂掉 —— 哪怕跑在没装 Omarchy 的 runner 上。机器上真有
+  Omarchy 时，它还会额外调一次真正的校验器。
 - 没装 PyGObject 时 GTK 测试会 skip 而不是失败，所以核心测试在哪都能跑。
 
 ## 已知边界
@@ -440,6 +469,22 @@ make run     # 从仓库直接运行窗口
 - HDR / ICC / 色彩管理等 `HL.MonitorSpec` 字段暂未接入界面，写盘时也不会动你手写的这些行。
 - 渲染器是以符号链接方式安装的，而 Omarchy 的插件监听不跟随符号链接 —— 所以改了 QML
   不会热重载。运行 `omarchy-restart-shell` 才会生效。
+
+## 发布渲染器插件
+
+`omarchy plugin add <url>` 是把仓库直接 clone 成 `~/.config/omarchy/plugins/<id>/`，
+所以 `manifest.json` 必须在仓库根。而我们的它在 `plugin/` 里，和必须与之保持一致的
+`preview.py` 放在一起 —— 把这两个拆成两个手工维护的仓库，正是「预览开始骗人」的开端。
+所以改成发布时再把 subtree 切出去：
+
+```bash
+make publish-plugin      # 校验 + 跑测试 + git subtree split --prefix=plugin + push
+```
+
+产物是一个**生成的镜像仓库**，不要往里面直接提交，下次发布会 force-push 覆盖掉。
+
+要上架社区目录 [omarchyplugins.com](https://omarchyplugins.com)，去开它的 issue 表单，
+填插件仓库链接、分类和标签。他们会自动校验当前 commit，然后由维护者审核通过。
 
 ## 参与开发
 
