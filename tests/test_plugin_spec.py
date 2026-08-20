@@ -126,6 +126,23 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(file=name):
                 self.assertTrue((self.source / name).is_file())
 
+    def test_the_readme_says_where_the_window_is(self):
+        # The plugin is the renderer and nothing else: installed on its own it
+        # has no window and puts no command on PATH. Someone arriving from the
+        # marketplace has to be told that, or the only way to choose a
+        # wallpaper is hand-editing JSON they were never shown.
+        readme = (self.source / "README.md").read_text()
+        self.assertIn("renderer only", readme)
+        self.assertIn("github.com/BlackKingBarOrg/displaywright", readme)
+
+    def test_double_clicking_the_desktop_cannot_fail_silently(self):
+        # Surface.qml offers to open the window on a double click. Launching a
+        # command that is not installed fails with no output at all, which
+        # reads as a dead desktop; the fallback has to say something.
+        surface = (self.source / "Surface.qml").read_text()
+        self.assertIn("command -v displaywright", surface)
+        self.assertIn("notify-send", surface)
+
     def test_the_readme_warns_about_the_background_layer(self):
         # Adding the plugin does not disable omarchy.background, so somebody
         # arriving from the marketplace has to be told to do it themselves.
