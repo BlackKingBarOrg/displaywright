@@ -27,9 +27,12 @@ display only once you give that display a picture — so the theme background, t
 SUPER + CTRL + SPACE switcher and the palette that follows your theme all keep
 working, and a display you never touch is never touched.
 
-It is driven by
-`~/.config/displaywright/wallpapers.json` — the format is in
-[`plugin/README.md`](plugin/README.md).
+Once it is in, **double-click a display's background** and Omarchy's own
+picture picker opens for that display alone. That is the plugin on its own, with
+no window and no config file to edit; the file it writes,
+`~/.config/displaywright/wallpapers.json`, is documented in
+[`plugin/README.md`](plugin/README.md) for the fits, colours, video and span
+that the picker does not cover.
 
 ### The window
 
@@ -87,6 +90,8 @@ hyprlang `keyword` on older builds.
   so a wallpaper survives you emptying `~/Downloads`.
 - Flat colours and video as well as pictures. No Apply button here — a wallpaper
   is visible the moment it lands.
+- **Double-clicking a display** opens Omarchy's own picker for that display,
+  with or without this window running.
 
 The fit table and the `wallpapers.json` format are documented in
 [`plugin/README.md`](plugin/README.md).

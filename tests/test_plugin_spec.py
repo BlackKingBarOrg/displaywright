@@ -166,6 +166,12 @@ class MarketplaceListing(unittest.TestCase):
         self.assertIn("separate project", readme)
         self.assertIn("github.com/BlackKingBarOrg/displaywright", readme)
 
+    def test_nothing_user_facing_still_claims_to_replace_the_stock_renderer(self):
+        # The description is what the marketplace card shows, and it said
+        # "Replaces Omarchy's built-in background renderer" for as long as that
+        # was true. It draws on top of it now.
+        self.assertNotIn("eplace", self.manifest["description"])
+
     def test_the_readme_does_not_ask_anyone_to_disable_the_stock_renderer(self):
         # The renderer draws on top of omarchy.background now. An install
         # instruction that still switches it off would blank every display the
