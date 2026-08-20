@@ -37,13 +37,18 @@ that the picker does not cover.
 ### The window
 
 Picture library, a live preview of every fit, and the display arrangement
-editor. Nothing is compiled; `make install` symlinks `displaywright` onto your
-`PATH` and adds the launcher entry:
+editor:
+
+```bash
+omarchy install app Displaywright displaywright-git
+```
+
+Or from a checkout, where `make install` symlinks `displaywright` onto your
+`PATH` and adds the launcher entry — nothing is compiled:
 
 ```bash
 git clone https://github.com/BlackKingBarOrg/displaywright
-cd displaywright
-make install
+cd displaywright && make install
 ```
 
 Then run `displaywright`, or search **Displaywright** in the app menu

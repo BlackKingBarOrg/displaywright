@@ -1,0 +1,27 @@
+pkgbase = displaywright-git
+	pkgdesc = Display arrangement and per-display wallpapers for Hyprland and Omarchy
+	pkgver = 0.1.0.r19.g43d0ce6
+	pkgrel = 1
+	url = https://github.com/BlackKingBarOrg/displaywright
+	arch = any
+	license = MIT
+	makedepends = git
+	makedepends = python-build
+	makedepends = python-installer
+	makedepends = python-setuptools
+	makedepends = python-wheel
+	depends = python
+	depends = python-gobject
+	depends = gtk4
+	depends = libadwaita
+	depends = hyprland
+	optdepends = omarchy: the shell that hosts the wallpaper renderer
+	optdepends = jq: pick a wallpaper by double-clicking a display
+	optdepends = qt6-multimedia-ffmpeg: video wallpapers
+	optdepends = ffmpeg: thumbnails for video wallpapers
+	provides = displaywright
+	conflicts = displaywright
+	source = displaywright::git+https://github.com/BlackKingBarOrg/displaywright.git
+	sha256sums = SKIP
+
+pkgname = displaywright-git

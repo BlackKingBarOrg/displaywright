@@ -2,7 +2,7 @@
 
 pkgname=displaywright-git
 _pkgname=displaywright
-pkgver=0.1.0.r0.g0000000
+pkgver=0.1.0.r19.g43d0ce6
 pkgrel=1
 pkgdesc="Display arrangement and per-display wallpapers for Hyprland and Omarchy"
 arch=('any')

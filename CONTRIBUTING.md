@@ -155,6 +155,14 @@ validates the current commit before a maintainer approves the listing.
 
 [mirror]: https://github.com/BlackKingBarOrg/displaywright-shell-plugin
 
+## Packaging
+
+`packaging/aur/` builds `displaywright-git` for the AUR, which is what makes
+`omarchy install app` able to install this at all. See
+[packaging/README.md](packaging/README.md) — in particular that the QML has to
+be installed under `share/` by hand, because it is a sibling of the Python
+package and a wheel does not carry it.
+
 ## Reporting a bug
 
 Please include:
