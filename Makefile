@@ -36,7 +36,7 @@ lint:
 	fi; \
 	fail=0; \
 	for f in plugin/*.qml plugin/renderers/*.qml; do \
-	  out=$$($(QMLLINT) $$ARGS "$$f" 2>&1 | grep -E '^Error'); \
+	  out=$$($(QMLLINT) $$ARGS "$$f" 2>&1 | grep -E '^Error|\[syntax\]'); \
 	  if [ -n "$$out" ]; then echo "$$f"; echo "$$out"; fail=1; fi; \
 	done; \
 	[ $$fail -eq 0 ] && echo "qml ok"
