@@ -159,10 +159,19 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(fit=fit):
                 self.assertIn(f"`{fit}`", readme)
 
+    def test_the_readme_says_how_to_open_the_arrangement(self):
+        # The overlay has no bar icon and no menu entry: being summoned is the
+        # only way in, so the command has to be written down.
+        readme = " ".join((self.source / "README.md").read_text().split())
+        self.assertIn("summon ai.bkblab.displaywright", readme)
+        self.assertIn("bindings.lua", readme)
+
     def test_the_readme_points_at_the_window(self):
         # Editing JSON is the floor, not the intended experience. Someone who
         # would rather click has to be able to find out that a window exists.
-        readme = (self.source / "README.md").read_text()
+        # Matched against unwrapped text: the README is hard-wrapped at 80 and a
+        # phrase lands across a line break as often as not.
+        readme = " ".join((self.source / "README.md").read_text().split())
         self.assertIn("separate project", readme)
         self.assertIn("github.com/BlackKingBarOrg/displaywright", readme)
 
