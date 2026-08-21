@@ -3,10 +3,21 @@ BIN     := $(PREFIX)/bin/displaywright
 DESKTOP := $(HOME)/.local/share/applications/displaywright.desktop
 ROOT    := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: test run install uninstall lint plugin unplugin migrate validate-plugin publish-plugin
+.PHONY: test test-plugin run install uninstall lint plugin unplugin migrate validate-plugin publish-plugin
 
-test:
+test: test-plugin
 	python3 -m unittest discover -t . -s tests
+
+# The plugin's logic lives in ES modules so that QML can import it and node can
+# test it -- the same files, no second implementation to keep in step. The QML
+# suites need a platform plugin but not a real display.
+QMLTESTRUNNER ?= /usr/lib/qt6/bin/qmltestrunner
+
+test-plugin:
+	node --test "plugin/tests/*.mjs"
+	@if ls plugin/tests/tst_*.qml >/dev/null 2>&1; then \
+	  QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input plugin/tests; \
+	else echo "(no QML suites yet)"; fi
 
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)
