@@ -13,11 +13,12 @@ test: test-plugin
 # suites need a platform plugin but not a real display.
 QMLTESTRUNNER ?= /usr/lib/qt6/bin/qmltestrunner
 
+# The interface is built offscreen against a fake controller, so a change can
+# be checked without omarchy-shell -- which serves a cached component for
+# anything edited while it runs and needs a full restart to pick a change up.
 test-plugin:
 	node --test "plugin/tests/*.mjs"
-	@if ls plugin/tests/tst_*.qml >/dev/null 2>&1; then \
-	  QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input plugin/tests; \
-	else echo "(no QML suites yet)"; fi
+	QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input plugin/tests
 
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)
