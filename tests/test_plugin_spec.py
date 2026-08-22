@@ -166,6 +166,30 @@ class MarketplaceListing(unittest.TestCase):
         self.assertIn("summon ai.bkblab.displaywright", readme)
         self.assertIn("bindings.lua", readme)
 
+    def test_the_strip_only_offers_what_qt_can_draw(self):
+        # This Qt has plugins for jpeg, gif, ico and svg on top of the built-in
+        # png and bmp, and no AVIF, JPEG XL or WebP decoder -- the packaged
+        # extras do not add one either. Listing such a file offers a picture
+        # that draws as nothing, which is exactly how it was reported.
+        script = (self.source / "list-wallpapers.sh").read_text()
+        for bad in ("avif", "jxl", "webp", "heic"):
+            with self.subTest(format=bad):
+                self.assertNotIn(f"*.{bad}", script)
+        for good in ("png", "jpg", "jpeg", "bmp", "gif"):
+            with self.subTest(format=good):
+                self.assertIn(f"*.{good}", script)
+
+    def test_adding_a_picture_converts_what_qt_cannot_draw(self):
+        # Refusing those formats outright would mean explaining which decoders
+        # this particular Qt build happens to ship, so the chooser offers them
+        # and the import converts.
+        script = (self.source / "add-wallpaper.sh").read_text()
+        self.assertIn("avif", script, "the chooser does not offer avif at all")
+        self.assertIn("qt_can_draw", script)
+        self.assertIn("convert_to_png", script)
+        # And has somewhere to fall back to if ImageMagick is absent.
+        self.assertIn("ffmpeg", script)
+
     def test_the_readme_points_at_the_window(self):
         # Editing JSON is the floor, not the intended experience. Someone who
         # would rather click has to be able to find out that a window exists.
