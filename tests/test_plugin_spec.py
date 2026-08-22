@@ -190,6 +190,14 @@ class MarketplaceListing(unittest.TestCase):
         # And has somewhere to fall back to if ImageMagick is absent.
         self.assertIn("ffmpeg", script)
 
+    def test_removing_a_picture_cannot_reach_outside_the_wallpaper_folder(self):
+        # The strip also lists the theme's own backgrounds, and a remove that
+        # took those would damage something this tool did not install.
+        script = (self.source / "remove-wallpaper.sh").read_text()
+        self.assertIn("Pictures/Displaywright", script)
+        self.assertIn("readlink -f", script, "a path with .. would walk out")
+        self.assertIn("gio trash", script, "remove should not mean gone")
+
     def test_the_readme_points_at_the_window(self):
         # Editing JSON is the floor, not the intended experience. Someone who
         # would rather click has to be able to find out that a window exists.
