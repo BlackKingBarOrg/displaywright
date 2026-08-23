@@ -198,14 +198,20 @@ class MarketplaceListing(unittest.TestCase):
         self.assertIn("readlink -f", script, "a path with .. would walk out")
         self.assertIn("gio trash", script, "remove should not mean gone")
 
-    def test_the_readme_points_at_the_window(self):
+    def test_the_readme_points_at_the_clicking_route(self):
         # Editing JSON is the floor, not the intended experience. Someone who
-        # would rather click has to be able to find out that a window exists.
-        # Matched against unwrapped text: the README is hard-wrapped at 80 and a
-        # phrase lands across a line break as often as not.
+        # would rather click has to be able to find out how. That used to mean
+        # pointing at a separate GTK project; the picture library is the strip
+        # along the bottom of the overlay now, and the README said otherwise
+        # for a release. Matched against unwrapped text: the README is
+        # hard-wrapped at 80 and a phrase lands across a line break as often
+        # as not.
         readme = " ".join((self.source / "README.md").read_text().split())
-        self.assertIn("separate project", readme)
+        self.assertIn("Double-click a display", readme)
+        self.assertIn("strip along the bottom", readme)
         self.assertIn("github.com/BlackKingBarOrg/displaywright", readme)
+        self.assertNotIn("separate project", readme,
+                         "the picture library ships in this plugin now")
 
     def test_nothing_user_facing_still_claims_to_replace_the_stock_renderer(self):
         # The description is what the marketplace card shows, and it said
