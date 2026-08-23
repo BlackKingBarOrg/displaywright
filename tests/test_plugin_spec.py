@@ -270,10 +270,12 @@ class LauncherEntryTests(unittest.TestCase):
     def setUp(self):
         self.source = plugin.source_dir()
         self.desktop = (self.source / "displaywright.desktop").read_text()
+        self.shortcuts = (self.source / "displaywright-shortcuts.desktop").read_text()
         self.installer = (self.source / "LauncherEntry.qml").read_text()
 
     def test_the_plugin_ships_a_desktop_entry_and_an_icon(self):
         self.assertTrue((self.source / "displaywright.desktop").is_file())
+        self.assertTrue((self.source / "displaywright-shortcuts.desktop").is_file())
         self.assertTrue((self.source / "icon.png").is_file(),
                         "an entry with no icon is hard to pick out of a grid")
 
@@ -296,6 +298,27 @@ class LauncherEntryTests(unittest.TestCase):
         self.assertIn("Component.onDestruction", self.installer,
                       "disabling the plugin should take its launcher entry with it")
 
+    def test_the_way_to_get_a_keybinding_sits_next_to_the_app(self):
+        # A toast was tried first and never arrived: nothing that waits inside
+        # a detached process survives the teardown storm omarchy-shell puts a
+        # plugin through while installing, and a second execDetached from the
+        # same handler does not run at all. A second launcher entry is written
+        # by the one call that does work, so it is there or the app is not.
+        self.assertIn("Displaywright Shortcuts", self.shortcuts)
+        self.assertIn("install-shortcuts.sh", self.installer,
+                      "nothing substitutes the script path into the entry")
+        self.assertIn("@SCRIPT@", self.shortcuts)
+        self.assertIn("floating-terminal", self.shortcuts,
+                      "the user has to see which key it picked")
+
+    def test_everything_happens_in_one_detached_call(self):
+        # Two execDetached calls from one handler: the first runs, the second
+        # does not. Verified across three clean installs, twice.
+        self.assertEqual(self.installer.count("Quickshell.execDetached"), 2,
+                         "one call to install, one to remove -- no more")
+        self.assertNotIn("sleep", self.installer,
+                         "a detached process that waits does not come back")
+
     def test_a_reload_does_not_delete_the_entry_it_just_wrote(self):
         # The shell destroys and recreates every plugin service on each
         # reload, and `omarchy plugin add` fires dozens of reloads while it
@@ -303,10 +326,8 @@ class LauncherEntryTests(unittest.TestCase):
         # next instance had just written -- detached and unordered, so the
         # delete usually landed last. Every fresh install ended with no entry,
         # which is exactly what three people reported.
-        self.assertIn("[ -d \"$3\" ] && exit 0", self.installer,
+        self.assertIn('[ -d "$dir" ] && exit 0', self.installer,
                       "destruction must not be treated as an uninstall")
-        self.assertIn("sleep", self.installer,
-                      "the removal has to lose the race it used to win")
 
     def test_it_only_ever_touches_its_own_file(self):
         # The installer writes into ~/.local/share/applications, where the
@@ -314,8 +335,9 @@ class LauncherEntryTests(unittest.TestCase):
         # somebody else wrote is never overwritten or deleted.
         self.assertIn("X-Displaywright-Managed=true", self.desktop)
         self.assertIn("marker", self.installer)
-        self.assertIn('grep -q "$3"', self.installer, "install does not check the marker")
-        self.assertIn('grep -q "$2"', self.installer, "remove does not check the marker")
+        self.assertEqual(self.installer.count('grep -q "$mark"'), 2,
+                         "both install and remove must gate on the marker")
+        self.assertIn("X-Displaywright-Managed=true", self.shortcuts)
 
 
 if __name__ == "__main__":
