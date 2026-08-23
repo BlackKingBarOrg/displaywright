@@ -198,6 +198,21 @@ class MarketplaceListing(unittest.TestCase):
             self.assertNotIn(f'o.bind("{taken}"', readme,
                              f"{taken} is a stock Omarchy binding")
 
+    def test_the_use_section_starts_by_saying_how_to_open_it(self):
+        # It used to open with "double-click a display's background" and leave
+        # how to open the window itself sixty lines below, under a heading
+        # nobody reaches after a wall of JSON. The one thing a new reader
+        # needs cannot be the thing they have to scroll for.
+        use = (self.source / "README.md").read_text().split("## Use", 1)[1]
+        use = use.split("###", 1)[0]
+        opening = " ".join(use.split())[:400]
+        self.assertIn("SUPER + ALT + SPACE", opening,
+                      "the Use section does not begin by saying how to open it")
+        self.assertLess(opening.index("SUPER + ALT + SPACE"),
+                        opening.index("double-click") if "double-click" in opening
+                        else len(opening),
+                        "opening the window comes before setting one wallpaper")
+
     def test_the_readme_leads_with_the_route_that_needs_no_setup(self):
         # This said "write yourself a keybind" and nothing else for two
         # releases, and three people in a row read that as the plugin being
