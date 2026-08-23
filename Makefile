@@ -34,6 +34,12 @@ icon:
 SHELL := /bin/bash
 
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
+# The QML compiler, run as a gate. qmllint is a linter: it reports a duplicated
+# property name as a Warning and exits 0, and a duplicated Component.onCompleted
+# not at all -- both of which omarchy-shell refuses to load, leaving a plugin
+# that installs cleanly and then does not exist. qmlcachegen applies the engine's
+# own rules, so what it accepts is what will load.
+QMLCACHEGEN ?= /usr/lib/qt6/qmlcachegen
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)
 QMLROOT := $(CURDIR)/build/qmlroot
 
@@ -48,6 +54,12 @@ lint:
 	  echo "omarchy not found, checking syntax only"; ARGS="--bare"; \
 	fi; \
 	fail=0; \
+	tmp=$$(mktemp -d); \
+	for f in plugin/*.qml plugin/renderers/*.qml; do \
+	  out=$$($(QMLCACHEGEN) --resource-path "/$$(basename $$f)" -o $$tmp/o.cpp "$$f" 2>&1) \
+	    || { echo "$$f"; echo "$$out"; fail=1; }; \
+	done; \
+	rm -rf $$tmp; \
 	for f in plugin/*.qml plugin/renderers/*.qml; do \
 	  out=$$($(QMLLINT) $$ARGS "$$f" 2>&1 \
 	    | grep -E '^(Error|Warning):' \

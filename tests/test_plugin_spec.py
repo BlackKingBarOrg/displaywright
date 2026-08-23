@@ -621,6 +621,17 @@ class LintGateTests(unittest.TestCase):
 
     ALLOWLIST = Path(__file__).resolve().parents[1] / "qmllint-allowed.txt"
 
+    def test_the_gate_compiles_the_qml_rather_than_only_linting_it(self):
+        # qmllint reports a duplicated property name as a Warning with exit 0,
+        # and a duplicated Component.onCompleted not at all. Both stop
+        # omarchy-shell loading the file, and both shipped. qmlcachegen
+        # applies the engine's own rules, so what it accepts is what loads.
+        makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
+        self.assertIn("QMLCACHEGEN", makefile,
+                      "a linter alone cannot tell you the shell will load it")
+        lint = makefile.split("lint:", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("$(QMLCACHEGEN)", lint, "the compiler has to run in the gate")
+
     def test_the_allowlist_exists_and_every_entry_says_why(self):
         text = self.ALLOWLIST.read_text()
         entries = [l for l in text.splitlines() if l.strip() and not l.startswith("#")]
