@@ -529,3 +529,79 @@ class ShortcutInstallerBehaviourTests(unittest.TestCase):
                          "--remove has to be exact, not approximate")
         self.assertFalse((self.apps / "displaywright.desktop").exists())
 
+
+class BoundedInputTests(unittest.TestCase):
+    """Nothing user-writable reaches the shell unbounded.
+
+    A plugin's QML runs inside omarchy-shell, so an input that is merely large
+    does not cost the plugin -- it costs the desktop. Quickshell's FileView has
+    no size limit, no no-follow, and no way to refuse a device, and one of
+    these reads used blockLoading, on the main thread. Raised in marketplace
+    review against 2cd0e2f.
+    """
+
+    def setUp(self):
+        self.source = plugin.source_dir()
+        self.reader = self.source / "read-config.sh"
+
+    def read(self, path, *rest):
+        return subprocess.run(["bash", str(self.reader), str(path), *rest],
+                              capture_output=True, text=True, timeout=20)
+
+    def test_qml_never_reads_a_user_writable_file_through_fileview(self):
+        # FileView is kept for writing, where the content is ours. Every read
+        # goes through read-config.sh.
+        for name in ("Wallpaper.qml", "Arrange.qml"):
+            body = (self.source / name).read_text()
+            self.assertNotIn(".text()", body,
+                             f"{name} reads a file with no bound on its size")
+
+    def test_the_reader_caps_what_it_returns(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            big = Path(d) / "big.json"
+            big.write_bytes(b"x" * 300_000)
+            self.assertEqual(self.read(big, "262144").stdout, "",
+                             "a file past the cap must not come back at all")
+            small = Path(d) / "small.json"
+            small.write_text('{"version":1}\n')
+            self.assertEqual(self.read(small).stdout, '{"version":1}\n')
+
+    def test_the_reader_refuses_anything_that_is_not_a_regular_file(self):
+        # The hazard a symlink carries is where it points: /dev/zero reads
+        # forever. A config symlinked into a dotfiles repo is ordinary and has
+        # to keep working, so the test is what it resolves to, not whether it
+        # is a link.
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            zero = Path(d) / "zero.json"
+            zero.symlink_to("/dev/zero")
+            result = self.read(zero)          # times out if it follows
+            self.assertEqual(result.stdout, "")
+
+            real = Path(d) / "real.json"
+            real.write_text("{}\n")
+            link = Path(d) / "link.json"
+            link.symlink_to(real)
+            self.assertEqual(self.read(link).stdout, "{}\n",
+                             "a symlinked config in a dotfiles repo is normal")
+
+    def test_the_picture_walk_does_not_follow_a_symlinked_directory(self):
+        # -L would enumerate whatever a link inside the folder points at, and
+        # every path it emits becomes an Image in the shell's process.
+        script = (self.source / "list-wallpapers.sh").read_text()
+        self.assertIn("find -H", script, "-L follows directory symlinks")
+        self.assertNotIn("find -L", script)
+
+    def test_the_picture_walk_is_capped(self):
+        script = (self.source / "list-wallpapers.sh").read_text()
+        self.assertIn("head -n", script, "no cap on how many paths are emitted")
+        self.assertIn("MAX_PATH", script, "no cap on path length")
+
+    def test_the_model_is_capped_even_if_the_script_is_not(self):
+        body = (self.source / "Arrange.qml").read_text()
+        self.assertIn("maxWallpapers", body)
+        self.assertIn("maxPathLength", body)
+        self.assertIn("slice(0, root.maxWallpapers)", body,
+                      "the list reaching the model has to be truncated, not just warned about")
+
