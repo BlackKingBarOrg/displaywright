@@ -3,7 +3,7 @@ BIN     := $(PREFIX)/bin/displaywright
 DESKTOP := $(HOME)/.local/share/applications/displaywright.desktop
 ROOT    := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: test test-plugin run install uninstall lint plugin unplugin migrate validate-plugin publish-plugin preview
+.PHONY: test test-plugin run install uninstall lint plugin unplugin migrate validate-plugin publish-plugin preview icon
 
 test: test-plugin
 	python3 -m unittest discover -t . -s tests
@@ -25,6 +25,11 @@ test-plugin:
 preview:
 	QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input tools/tst_preview.qml
 	@echo "wrote plugin/preview.png"
+
+# The launcher icon, drawn rather than sourced.
+icon:
+	QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input tools/tst_icon.qml
+	@echo "wrote plugin/icon.png"
 
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)

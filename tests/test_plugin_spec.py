@@ -159,12 +159,18 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(fit=fit):
                 self.assertIn(f"`{fit}`", readme)
 
-    def test_the_readme_says_how_to_open_the_arrangement(self):
-        # The overlay has no bar icon and no menu entry: being summoned is the
-        # only way in, so the command has to be written down.
+    def test_the_readme_leads_with_the_route_that_needs_no_setup(self):
+        # This said "write yourself a keybind" and nothing else for two
+        # releases, and three people in a row read that as the plugin being
+        # broken. The launcher entry has to be the documented way in; the
+        # keybind is for people who want one.
         readme = " ".join((self.source / "README.md").read_text().split())
-        self.assertIn("summon ai.bkblab.displaywright", readme)
+        self.assertIn("app launcher", readme)
+        self.assertIn("SUPER + SPACE", readme)
+        self.assertIn("toggle ai.bkblab.displaywright", readme)
         self.assertIn("bindings.lua", readme)
+        self.assertLess(readme.index("app launcher"), readme.index("bindings.lua"),
+                        "the route needing no setup should come first")
 
     def test_the_strip_only_offers_what_qt_can_draw(self):
         # This Qt has plugins for jpeg, gif, ico and svg on top of the built-in
@@ -238,6 +244,56 @@ class OmarchysOwnValidator(unittest.TestCase):
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr.strip())
+
+
+class LauncherEntryTests(unittest.TestCase):
+    """A plugin nobody can find is a plugin that does not work.
+
+    Omarchy clones a repository into ~/.config/omarchy/plugins and stops
+    there: no install hook, no manifest field for a keybinding, and nothing
+    that puts a name in the launcher. Three people in a row installed this and
+    reported it broken, because the only documented way to open the overlay
+    was a keybind they had to write themselves. The service installs a desktop
+    entry instead, the way bobbynicholas.omaland does.
+    """
+
+    def setUp(self):
+        self.source = plugin.source_dir()
+        self.desktop = (self.source / "displaywright.desktop").read_text()
+        self.installer = (self.source / "LauncherEntry.qml").read_text()
+
+    def test_the_plugin_ships_a_desktop_entry_and_an_icon(self):
+        self.assertTrue((self.source / "displaywright.desktop").is_file())
+        self.assertTrue((self.source / "icon.png").is_file(),
+                        "an entry with no icon is hard to pick out of a grid")
+
+    def test_the_entry_opens_the_overlay(self):
+        manifest = json.loads((self.source / "manifest.json").read_text())
+        self.assertIn(f"toggle {manifest['id']}", self.desktop)
+        self.assertIn("TryExec=omarchy-shell", self.desktop,
+                      "the entry should hide itself where the shell is absent")
+
+    def test_the_entry_can_be_found_by_what_it_does(self):
+        # Nobody searches for the product name they have not learnt yet. They
+        # type "display", "monitor", or "wallpaper".
+        for word in ("display", "monitor", "wallpaper", "resolution"):
+            self.assertIn(word, self.desktop.lower(), f"not searchable by {word!r}")
+
+    def test_the_service_installs_and_removes_the_entry(self):
+        service = (self.source / "Wallpaper.qml").read_text()
+        self.assertIn("LauncherEntry", service,
+                      "nothing writes the entry, so nothing appears in the launcher")
+        self.assertIn("Component.onDestruction", self.installer,
+                      "disabling the plugin should take its launcher entry with it")
+
+    def test_it_only_ever_touches_its_own_file(self):
+        # The installer writes into ~/.local/share/applications, where the
+        # user's own entries live. Both scripts gate on the marker so a file
+        # somebody else wrote is never overwritten or deleted.
+        self.assertIn("X-Displaywright-Managed=true", self.desktop)
+        self.assertIn("marker", self.installer)
+        self.assertIn('grep -q "$3"', self.installer, "install does not check the marker")
+        self.assertIn('grep -q "$2"', self.installer, "remove does not check the marker")
 
 
 if __name__ == "__main__":
