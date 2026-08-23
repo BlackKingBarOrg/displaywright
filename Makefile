@@ -3,7 +3,7 @@ BIN     := $(PREFIX)/bin/displaywright
 DESKTOP := $(HOME)/.local/share/applications/displaywright.desktop
 ROOT    := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 
-.PHONY: test test-plugin run install uninstall lint plugin unplugin migrate validate-plugin publish-plugin
+.PHONY: test test-plugin run install uninstall lint plugin unplugin migrate validate-plugin publish-plugin preview
 
 test: test-plugin
 	python3 -m unittest discover -t . -s tests
@@ -19,6 +19,12 @@ QMLTESTRUNNER ?= /usr/lib/qt6/bin/qmltestrunner
 test-plugin:
 	node --test "plugin/tests/*.mjs"
 	QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input plugin/tests
+
+# The marketplace card, rendered from the real components rather than
+# screenshotted by hand. Needs the theme backgrounds Omarchy installs.
+preview:
+	QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input tools/tst_preview.qml
+	@echo "wrote plugin/preview.png"
 
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)
