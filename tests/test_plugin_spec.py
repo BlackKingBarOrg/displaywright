@@ -161,6 +161,33 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(fit=fit):
                 self.assertIn(f"`{fit}`", readme)
 
+    def test_every_key_the_readme_names_is_the_one_it_says_it_is(self):
+        # Three combinations are quoted as Omarchy's own. Checked against a
+        # live `hyprctl binds` on 2026-08-23: SUPER+SPACE is modmask 64, the
+        # Omarchy menu; SUPER+ALT+SPACE is 72, the Apps menu; SUPER+CTRL+SPACE
+        # is 68, the background switcher. Recorded here because a README that
+        # names the wrong key sends people to press something else and
+        # conclude the plugin is broken -- which is how SUPER + P went wrong.
+        readme = " ".join((self.source / "README.md").read_text().split())
+        for combo, what in (("SUPER + SPACE", "Omarchy menu"),
+                            ("SUPER + ALT + SPACE", "Apps menu"),
+                            ("SUPER + CTRL + SPACE", "switcher")):
+            if combo in readme:
+                self.assertIn(what, readme,
+                              f"{combo} is named without saying it is the {what}")
+
+    def test_the_install_section_admits_that_an_update_needs_a_restart(self):
+        # It read "That is the whole install, and it changes nothing yet" while
+        # a section a hundred lines below explained that an update installs
+        # nothing until the shell restarts. Anyone updating followed the first
+        # one and got nothing.
+        install = (self.source / "README.md").read_text().split("## Install", 1)[1]
+        install = install.split("## Use", 1)[0]
+        self.assertIn("restart", install.lower(),
+                      "the Install section has to mention the update path")
+        self.assertNotIn("changes nothing yet", install,
+                         "the install does write a launcher entry")
+
     def test_the_readme_does_not_recommend_a_key_omarchy_already_uses(self):
         # It recommended SUPER + P for two releases. That is Omarchy's stock
         # "Pseudo window" binding (default/hypr/bindings/tiling.lua), and the
