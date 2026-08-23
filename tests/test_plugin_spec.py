@@ -273,6 +273,18 @@ class MarketplaceListing(unittest.TestCase):
         self.assertNotIn("separate project", readme,
                          "the picture library ships in this plugin now")
 
+    def test_the_description_names_the_key_that_actually_opens_it(self):
+        # The marketplace requires a README and does not render it: the only
+        # prose on a listing is manifest.description. It said SUPER+SPACE,
+        # which is the Omarchy menu -- the Apps menu, where the launcher entry
+        # goes, is SUPER+ALT+SPACE. The README was fixed and this was not, so
+        # the wrong key sat in the one sentence most people would ever read.
+        d = self.manifest["description"]
+        if "SPACE" in d:
+            self.assertIn("SUPER+ALT+SPACE", d.replace(" + ", "+"),
+                          "the Apps menu is SUPER+ALT+SPACE, not SUPER+SPACE")
+        self.assertLessEqual(len(d), 500, "the marketplace truncates past 500")
+
     def test_nothing_user_facing_still_claims_to_replace_the_stock_renderer(self):
         # The description is what the marketplace card shows, and it said
         # "Replaces Omarchy's built-in background renderer" for as long as that
