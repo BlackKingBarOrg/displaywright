@@ -15,10 +15,12 @@ with them.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 import unittest
+from pathlib import Path
 
 from displaywright.wallpapers import plugin
 
@@ -296,6 +298,21 @@ class LauncherEntryTests(unittest.TestCase):
         self.assertIn("Component.onDestruction", self.installer,
                       "disabling the plugin should take its launcher entry with it")
 
+    def test_a_reload_is_not_mistaken_for_an_uninstall(self):
+        # The shell destroys and recreates every plugin service on each
+        # reload, and `omarchy plugin add` fires dozens while installing. When
+        # destruction meant "delete the entry", those deletes raced the
+        # incoming instance's write and usually won, so a fresh install ended
+        # with nothing in the launcher. omarchy-plugin-remove takes the folder
+        # away before it tells the shell (bin/omarchy-plugin-remove: rm -rf at
+        # 103, mv at 113, rescanPlugins at 117), so the manifest still being
+        # on disk means this teardown is a reload.
+        self.assertIn('[ -e "$3" ] && exit 0', self.installer)
+        self.assertIn("manifest.json", self.installer,
+                      "nothing tells a reload from a removal")
+        self.assertNotIn("sleep", self.installer,
+                         "the ordering is knowable; it does not need waiting on")
+
     def test_it_only_ever_touches_its_own_file(self):
         # The installer writes into ~/.local/share/applications, where the
         # user's own entries live. Both scripts gate on the marker so a file
@@ -358,4 +375,103 @@ class ShortcutInstallerTests(unittest.TestCase):
         # take out the user's whole menu, not just our row.
         self.assertIn("jq empty", self.script)
         self.assertIn("refusing to write", self.script)
+
+
+HAVE_HYPR = bool(shutil.which("hyprctl") and shutil.which("jq"))
+
+
+@unittest.skipUnless(HAVE_HYPR, "install-shortcuts.sh needs hyprctl and jq")
+class ShortcutInstallerBehaviourTests(unittest.TestCase):
+    """Runs the real script against throwaway copies of the files it edits.
+
+    Grepping the source proved too weak twice over: both bugs below were in a
+    script whose text-level tests were passing. These drive it instead, with
+    every path it writes to redirected, which is also what stops the run from
+    reaching into the machine's own config.
+    """
+
+    def setUp(self):
+        import tempfile
+        self.dir = Path(tempfile.mkdtemp(prefix="dw-shortcuts-"))
+        self.apps = self.dir / "apps"
+        self.apps.mkdir()
+        self.script = plugin.source_dir() / "install-shortcuts.sh"
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def run_installer(self, bindings, menu, *args):
+        env = dict(os.environ,
+                   HYPR_BINDINGS=str(bindings),
+                   OMARCHY_MENU_EXT=str(menu),
+                   DW_DESKTOP_DIR=str(self.apps))
+        return subprocess.run(["bash", str(self.script), *args],
+                              capture_output=True, text=True, env=env, timeout=60)
+
+    def test_a_bindings_file_with_only_our_opening_marker_is_left_alone(self):
+        # `sed '/begin/,/end/d'` with no closing marker runs to end of file. On
+        # a five-line file that deleted four, three of them somebody else's
+        # bindings -- and this file is often a symlink into a dotfiles repo.
+        bindings = self.dir / "bindings.lua"
+        bindings.write_text(
+            'o.bind("SUPER + RETURN", "Terminal", "foot")\n'
+            "-- >>> displaywright (managed) >>>\n"
+            'o.bind("SUPER + X", "Mine", "t1")\n'
+            'o.bind("SUPER + Y", "Also mine", "t2")\n'
+            'o.bind("SUPER + Z", "Third", "t3")\n')
+        before = bindings.read_text()
+        menu = self.dir / "menu.jsonc"
+        menu.write_text("{\n}\n")
+
+        result = self.run_installer(bindings, menu)
+        self.assertEqual(bindings.read_text(), before,
+                         "a half-marked file must not lose the rest of itself")
+        self.assertIn("no closing", result.stdout + result.stderr,
+                      "the line to delete by hand has to be named")
+
+    def test_a_menu_file_with_no_line_of_its_own_brace_is_refused(self):
+        # The row goes in after a line that is nothing but `{`. A file opening
+        # `{ "a": 1 }` has none, and awk printed it back unchanged while the
+        # caller announced the row had been added.
+        menu = self.dir / "menu.jsonc"
+        menu.write_text('{ "a": 1 }\n')
+        bindings = self.dir / "bindings.lua"
+        bindings.write_text('o.bind("SUPER + RETURN", "Terminal", "foot")\n')
+
+        result = self.run_installer(bindings, menu)
+        self.assertEqual(menu.read_text(), '{ "a": 1 }\n', "edited anyway")
+        self.assertFalse(list(self.dir.glob("*.new")), "left a temporary behind")
+        self.assertNotIn("added a Displays row", result.stdout,
+                         "claimed a row it did not add")
+
+    def test_it_reports_only_the_ways_in_that_landed(self):
+        menu = self.dir / "menu.jsonc"
+        menu.write_text('{ "a": 1 }\n')          # refuses the row
+        bindings = self.dir / "bindings.lua"
+        bindings.write_text('o.bind("SUPER + RETURN", "Terminal", "foot")\n')
+
+        out = self.run_installer(bindings, menu).stdout
+        self.assertIn("Apps menu", out, "the launcher entry did land")
+        self.assertNotIn("Omarchy menu", out, "listed a row that was refused")
+
+    def test_install_is_idempotent_and_remove_puts_everything_back(self):
+        bindings = self.dir / "bindings.lua"
+        bindings.write_text('o.bind("SUPER + RETURN", "Terminal", "foot")\n')
+        menu = self.dir / "menu.jsonc"
+        menu.write_text("{\n  // a comment\n}\n")
+        before = (bindings.read_text(), menu.read_text())
+
+        self.run_installer(bindings, menu)
+        self.run_installer(bindings, menu)
+        text = bindings.read_text()
+        self.assertEqual(text.count("displaywright (managed)"), 1, "block added twice")
+        self.assertEqual(text.count("<<< displaywright <<<"), 1, "unclosed block")
+        self.assertEqual(text.count("o.bind(\"SUPER"), 2, "one of ours, one of theirs")
+        self.assertEqual(menu.read_text().count('"displays":'), 1)
+        self.assertTrue((self.apps / "displaywright.desktop").is_file())
+
+        self.run_installer(bindings, menu, "--remove")
+        self.assertEqual((bindings.read_text(), menu.read_text()), before,
+                         "--remove has to be exact, not approximate")
+        self.assertFalse((self.apps / "displaywright.desktop").exists())
 
