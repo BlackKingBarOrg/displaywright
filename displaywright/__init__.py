@@ -12,7 +12,7 @@ selection rather than in two apps that disagree about your desk.
   ``omarchy-shell`` plugin that draws it.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 APP_ID = "ai.bkblab.displaywright"
 APP_NAME = "displaywright"
 
