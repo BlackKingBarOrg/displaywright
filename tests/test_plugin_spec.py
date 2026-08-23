@@ -605,3 +605,41 @@ class BoundedInputTests(unittest.TestCase):
         self.assertIn("slice(0, root.maxWallpapers)", body,
                       "the list reaching the model has to be truncated, not just warned about")
 
+
+class LintGateTests(unittest.TestCase):
+    """The lint gate has to fail on anything that stops the shell loading.
+
+    A duplicated property name is reported by qmllint as a Warning, with exit
+    code 0, while omarchy-shell refuses the file outright -- the service never
+    loads, the launcher entry is never written, and the plugin simply is not
+    there. The gate said "qml ok" through all of it, because it grepped for
+    `^Error` and `[syntax]`.
+
+    It is an allowlist now. These check that the categories which actually
+    break loading can never end up on it.
+    """
+
+    ALLOWLIST = Path(__file__).resolve().parents[1] / "qmllint-allowed.txt"
+
+    def test_the_allowlist_exists_and_every_entry_says_why(self):
+        text = self.ALLOWLIST.read_text()
+        entries = [l for l in text.splitlines() if l.strip() and not l.startswith("#")]
+        self.assertTrue(entries, "an empty allowlist would pass everything")
+        self.assertGreater(text.count("#"), len(entries),
+                           "each allowed category needs a reason next to it")
+
+    def test_what_actually_breaks_loading_is_never_allowed(self):
+        allowed = [l.strip() for l in self.ALLOWLIST.read_text().splitlines()
+                   if l.strip() and not l.startswith("#")]
+        for category in ("[duplicated-name]", "[duplicate-property-binding]", "[syntax]"):
+            self.assertNotIn(category, allowed,
+                             f"{category} stops omarchy-shell loading the file")
+
+    def test_no_blank_line_can_slip_into_the_allowlist(self):
+        # `grep -vFf` with an empty pattern matches every line, which silently
+        # turns the gate off entirely. It did, for one revision.
+        raw = self.ALLOWLIST.read_text().splitlines()
+        patterns = [l for l in raw if not l.startswith("#")]
+        self.assertFalse([l for l in patterns if not l.strip() and l != ""],
+                         "whitespace-only pattern")
+

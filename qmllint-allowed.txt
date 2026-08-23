@@ -1,0 +1,29 @@
+# Warnings qmllint raises that omarchy-shell loads anyway. Anything not listed
+# here fails `make lint`.
+#
+# An allowlist rather than a list of things to catch, because the list of ways
+# a file can be rejected is not knowable in advance. A denylist of `^Error` and
+# `[syntax]` let a duplicated property name through three times: qmllint reports
+# it as a Warning and exits 0, while the shell refuses to load the file at all
+# and the plugin silently does not exist.
+
+# `palette` is deliberately shadowed: this is the theme snapshot the overlay
+# reads off the service, and QQuickItem's own palette is not in play.
+[property-override]
+
+# QProcess::ExitStatus is a Quickshell type that only resolves inside the
+# shell, so linting outside it cannot see the signal's parameter.
+[signal-handler-parameters]
+
+# Quickshell's own types do not resolve outside the shell that provides them,
+# so linting here cannot see that PanelWindow is created by the shell.
+[uncreatable-type]
+
+# `index` inside a Repeater delegate, and properties on components used as
+# inline types: both resolve at runtime and these files load in the shell.
+[index]
+[missing-property]
+
+# Ordinary QML: ids and properties reached without qualifying them. Eighty of
+# these, none of which stops a file loading.
+[unqualified]

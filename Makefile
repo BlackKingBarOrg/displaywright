@@ -31,6 +31,8 @@ icon:
 	QT_QPA_PLATFORM=offscreen $(QMLTESTRUNNER) -input tools/tst_icon.qml
 	@echo "wrote plugin/icon.png"
 
+SHELL := /bin/bash
+
 QMLLINT ?= /usr/lib/qt6/bin/qmllint
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)
 QMLROOT := $(CURDIR)/build/qmlroot
@@ -47,7 +49,9 @@ lint:
 	fi; \
 	fail=0; \
 	for f in plugin/*.qml plugin/renderers/*.qml; do \
-	  out=$$($(QMLLINT) $$ARGS "$$f" 2>&1 | grep -E '^Error|\[syntax\]'); \
+	  out=$$($(QMLLINT) $$ARGS "$$f" 2>&1 \
+	    | grep -E '^(Error|Warning):' \
+	    | grep -vFf <(grep -vE '^#|^[[:space:]]*$$' qmllint-allowed.txt)); \
 	  if [ -n "$$out" ]; then echo "$$f"; echo "$$out"; fail=1; fi; \
 	done; \
 	[ $$fail -eq 0 ] && echo "qml ok"
