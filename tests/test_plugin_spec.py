@@ -159,17 +159,27 @@ class MarketplaceListing(unittest.TestCase):
             with self.subTest(fit=fit):
                 self.assertIn(f"`{fit}`", readme)
 
+    def test_the_readme_does_not_recommend_a_key_omarchy_already_uses(self):
+        # It recommended SUPER + P for two releases. That is Omarchy's stock
+        # "Pseudo window" binding (default/hypr/bindings/tiling.lua), and the
+        # README did not say to unbind it first -- so anyone who copied the
+        # line got a pseudo-tiled window and a plugin that looked broken.
+        readme = (self.source / "README.md").read_text()
+        for taken in ("SUPER + P", "SUPER + F", "SUPER + CTRL + V"):
+            self.assertNotIn(f'o.bind("{taken}"', readme,
+                             f"{taken} is a stock Omarchy binding")
+
     def test_the_readme_leads_with_the_route_that_needs_no_setup(self):
         # This said "write yourself a keybind" and nothing else for two
         # releases, and three people in a row read that as the plugin being
         # broken. The launcher entry has to be the documented way in; the
         # keybind is for people who want one.
         readme = " ".join((self.source / "README.md").read_text().split())
-        self.assertIn("app launcher", readme)
-        self.assertIn("SUPER + SPACE", readme)
-        self.assertIn("toggle ai.bkblab.displaywright", readme)
-        self.assertIn("bindings.lua", readme)
-        self.assertLess(readme.index("app launcher"), readme.index("bindings.lua"),
+        self.assertIn("SUPER + ALT + SPACE", readme,
+                      "the Apps menu is the only route that needs no setup")
+        self.assertIn("install-shortcuts.sh", readme)
+        self.assertLess(readme.index("SUPER + ALT + SPACE"),
+                        readme.index("install-shortcuts.sh"),
                         "the route needing no setup should come first")
 
     def test_the_strip_only_offers_what_qt_can_draw(self):
@@ -298,3 +308,54 @@ class LauncherEntryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShortcutInstallerTests(unittest.TestCase):
+    """Omarchy will not let a plugin register a key or a menu row.
+
+    The manifest has no field for either, and `omarchy plugin add` runs nothing
+    from inside a plugin -- it refuses a folder containing even a symlink,
+    because a plugin lands in a trusted directory without being trusted itself.
+    So the shortcuts are a command the user runs, and what that command is
+    allowed to do to their config is the whole of what these check.
+    """
+
+    def setUp(self):
+        self.script = (plugin.source_dir() / "install-shortcuts.sh").read_text()
+
+    def test_it_is_executable(self):
+        path = plugin.source_dir() / "install-shortcuts.sh"
+        self.assertTrue(path.stat().st_mode & 0o111, "cloned without the bit set")
+
+    def test_it_asks_the_compositor_which_keys_are_taken(self):
+        # Bindings can come from a Lua config that generates them at runtime,
+        # or from a file symlinked into a dotfiles repo. Grepping the config
+        # misses both; hyprctl knows.
+        self.assertIn("hyprctl binds -j", self.script)
+        self.assertNotIn("grep", self.script.split("occupant()")[1].split("}")[0])
+
+    def test_it_never_takes_a_key_from_the_user(self):
+        # Omarchy's own rule is to unbind first and say what was displaced.
+        # That is a rule for someone at the keyboard; an install script has no
+        # standing to make that call, and a silently stolen SUPER + F is
+        # untraceable three months later.
+        self.assertNotIn("unbind", self.script.lower())
+        self.assertIn("not this", self.script, "no message for the all-taken case")
+
+    def test_it_survives_a_config_that_is_a_symlink(self):
+        # Editing in place through a link replaces the link with a regular
+        # file and quietly detaches the dotfiles repo behind it.
+        self.assertIn("readlink -f", self.script)
+
+    def test_it_backs_up_before_editing_and_can_undo_itself(self):
+        self.assertIn("cp --", self.script)
+        self.assertIn("--remove", self.script)
+        for mark in (">>> displaywright (managed) >>>", "<<< displaywright <<<"):
+            self.assertIn(mark, self.script, "no marker, so no way to undo precisely")
+
+    def test_it_checks_the_menu_file_still_parses(self):
+        # It edits JSONC by hand. Writing a file the shell cannot read would
+        # take out the user's whole menu, not just our row.
+        self.assertIn("jq empty", self.script)
+        self.assertIn("refusing to write", self.script)
+
