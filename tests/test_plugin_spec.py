@@ -593,10 +593,39 @@ class BoundedInputTests(unittest.TestCase):
         self.assertIn("find -H", script, "-L follows directory symlinks")
         self.assertNotIn("find -L", script)
 
-    def test_the_picture_walk_is_capped(self):
+    def test_the_cap_comes_before_the_traversal_and_the_sort(self):
+        # Raised in review as a follow-up: capping with `head` after `sort`
+        # bounds the output and nothing else. sort has to read the whole
+        # traversal before it can emit a line, so a large or hostile tree
+        # exhausts the walk and the sort before the advertised limit does
+        # anything. The count is enforced first now, and closing the pipe
+        # stops find.
         script = (self.source / "list-wallpapers.sh").read_text()
-        self.assertIn("head -n", script, "no cap on how many paths are emitted")
         self.assertIn("MAX_PATH", script, "no cap on path length")
+        self.assertIn("n >= maxn", script, "nothing stops the walk at the cap")
+        self.assertLess(script.index("n >= maxn"), script.index("sort -u"),
+                        "the cap has to be enforced before sorting")
+        self.assertNotIn("| head -n", script,
+                         "a trailing head caps the output, not the work")
+
+    def test_the_walk_stops_at_the_cap_and_says_so(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            home = Path(d) / "home"
+            pics = home / "Pictures" / "Displaywright"
+            pics.mkdir(parents=True)
+            for i in range(50):
+                (pics / f"p{i}.png").touch()
+            env = dict(os.environ, HOME=str(home),
+                       XDG_CONFIG_HOME=str(home / ".config"),
+                       XDG_STATE_HOME=str(home / ".local/state"),
+                       DW_MAX_WALLPAPERS="10")
+            r = subprocess.run(["bash", str(self.source / "list-wallpapers.sh")],
+                               capture_output=True, text=True, env=env, timeout=30)
+            lines = [l for l in r.stdout.splitlines() if l]
+            self.assertEqual(len(lines), 10, "the cap is not enforced")
+            self.assertIn("stopped at 10", r.stderr,
+                          "silently dropping pictures reads as losing them")
 
     def test_the_model_is_capped_even_if_the_script_is_not(self):
         body = (self.source / "Arrange.qml").read_text()
