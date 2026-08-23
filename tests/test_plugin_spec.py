@@ -296,6 +296,18 @@ class LauncherEntryTests(unittest.TestCase):
         self.assertIn("Component.onDestruction", self.installer,
                       "disabling the plugin should take its launcher entry with it")
 
+    def test_a_reload_does_not_delete_the_entry_it_just_wrote(self):
+        # The shell destroys and recreates every plugin service on each
+        # reload, and `omarchy plugin add` fires dozens of reloads while it
+        # installs. Removing on destruction therefore deleted the entry the
+        # next instance had just written -- detached and unordered, so the
+        # delete usually landed last. Every fresh install ended with no entry,
+        # which is exactly what three people reported.
+        self.assertIn("[ -d \"$3\" ] && exit 0", self.installer,
+                      "destruction must not be treated as an uninstall")
+        self.assertIn("sleep", self.installer,
+                      "the removal has to lose the race it used to win")
+
     def test_it_only_ever_touches_its_own_file(self):
         # The installer writes into ~/.local/share/applications, where the
         # user's own entries live. Both scripts gate on the marker so a file
