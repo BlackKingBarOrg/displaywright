@@ -42,9 +42,14 @@ QMLLINT ?= /usr/lib/qt6/bin/qmllint
 QMLCACHEGEN ?= /usr/lib/qt6/qmlcachegen
 OMARCHY ?= $(or $(OMARCHY_PATH),/usr/share/omarchy)
 QMLROOT := $(CURDIR)/build/qmlroot
+# The same ruff CI runs, at the same version, so the lint job cannot fail on
+# something this target passed. It did, for a month: compileall does not care
+# what a variable is called and ruff does.
+RUFF ?= uvx ruff@0.16.3
 
 lint:
 	python3 -m compileall -q displaywright tests
+	$(RUFF) check .
 	@# `qs.Commons` and `qs.Ui` are Omarchy's shell root under the alias
 	@# Quickshell gives it at runtime; qmllint needs that alias on disk.
 	@if [ -d "$(OMARCHY)/shell" ]; then \
