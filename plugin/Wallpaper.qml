@@ -152,6 +152,23 @@ Item {
     configReader.running = true
   }
 
+  // The plugin registry can inject manifest.__sourceDir while the first read
+  // is still using the fallback command. Retry briefly during startup so an
+  // unrelated plugin rescan cannot leave every output on the theme wallpaper.
+  property int startupConfigReadAttempts: 0
+  Timer {
+    id: startupConfigRetry
+    interval: 500
+    running: true
+    repeat: true
+    onTriggered: {
+      if (!root.pluginDir || configReader.running) return
+      root.reloadConfig()
+      root.startupConfigReadAttempts += 1
+      if (root.startupConfigReadAttempts >= 5) stop()
+    }
+  }
+
   //: A FileView on the file would read it, which is the thing being avoided,
   //: and a FileView on the directory does not fire on an in-place write --
   //: checked, and "save it and the renderer picks it up" is documented
