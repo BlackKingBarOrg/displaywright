@@ -622,7 +622,7 @@ class BoundedInputTests(unittest.TestCase):
                        DW_MAX_WALLPAPERS="10")
             r = subprocess.run(["bash", str(self.source / "list-wallpapers.sh")],
                                capture_output=True, text=True, env=env, timeout=30)
-            lines = [l for l in r.stdout.splitlines() if l]
+            lines = [line for line in r.stdout.splitlines() if line]
             self.assertEqual(len(lines), 10, "the cap is not enforced")
             self.assertIn("stopped at 10", r.stderr,
                           "silently dropping pictures reads as losing them")
@@ -663,14 +663,14 @@ class LintGateTests(unittest.TestCase):
 
     def test_the_allowlist_exists_and_every_entry_says_why(self):
         text = self.ALLOWLIST.read_text()
-        entries = [l for l in text.splitlines() if l.strip() and not l.startswith("#")]
+        entries = [line for line in text.splitlines() if line.strip() and not line.startswith("#")]
         self.assertTrue(entries, "an empty allowlist would pass everything")
         self.assertGreater(text.count("#"), len(entries),
                            "each allowed category needs a reason next to it")
 
     def test_what_actually_breaks_loading_is_never_allowed(self):
-        allowed = [l.strip() for l in self.ALLOWLIST.read_text().splitlines()
-                   if l.strip() and not l.startswith("#")]
+        allowed = [line.strip() for line in self.ALLOWLIST.read_text().splitlines()
+                   if line.strip() and not line.startswith("#")]
         for category in ("[duplicated-name]", "[duplicate-property-binding]", "[syntax]"):
             self.assertNotIn(category, allowed,
                              f"{category} stops omarchy-shell loading the file")
@@ -679,7 +679,7 @@ class LintGateTests(unittest.TestCase):
         # `grep -vFf` with an empty pattern matches every line, which silently
         # turns the gate off entirely. It did, for one revision.
         raw = self.ALLOWLIST.read_text().splitlines()
-        patterns = [l for l in raw if not l.startswith("#")]
-        self.assertFalse([l for l in patterns if not l.strip() and l != ""],
+        patterns = [line for line in raw if not line.startswith("#")]
+        self.assertFalse([line for line in patterns if not line.strip() and line != ""],
                          "whitespace-only pattern")
 
